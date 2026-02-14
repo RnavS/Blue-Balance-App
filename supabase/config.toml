@@ -1,0 +1,10 @@
+project_id = "risngyykrjzdvyznyfxw"
+
+[functions.generate-tip]
+verify_jwt = false
+
+[functions.ai-coach]
+verify_jwt = false
+
+[functions.estimate-beverage]
+verify_jwt = false
