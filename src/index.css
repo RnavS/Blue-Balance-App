@@ -1,0 +1,281 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Midnight Theme (Default) */
+    --background: 222 47% 5%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 8%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 8%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 262 83% 58%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 262 83% 58%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 262 83% 58%;
+
+    --radius: 1rem;
+
+    /* Custom Theme Variables */
+    --gradient-start: 262 83% 58%;
+    --gradient-end: 280 87% 65%;
+    --glow: 262 83% 58%;
+    --success: 142 76% 45%;
+    --warning: 0 84% 60%;
+    --danger: 0 72% 51%;
+    
+    /* Glass effect */
+    --glass-bg: 222 47% 11% / 0.6;
+    --glass-border: 0 0% 100% / 0.1;
+    
+    /* Progress colors */
+    --progress-on-track: 142 76% 45%;
+    --progress-behind: 0 72% 51%;
+    --target-marker: 262 50% 35%;
+  }
+
+  /* Ocean Blue Theme */
+  .theme-ocean {
+    --background: 213 47% 6%;
+    --card: 213 47% 9%;
+    --primary: 187 92% 50%;
+    --accent: 187 92% 50%;
+    --ring: 187 92% 50%;
+    --gradient-start: 187 92% 50%;
+    --gradient-end: 199 95% 55%;
+    --glow: 187 92% 50%;
+    --glass-bg: 213 47% 12% / 0.6;
+    --target-marker: 187 60% 30%;
+  }
+
+  /* Neon Mint Theme */
+  .theme-mint {
+    --background: 160 47% 5%;
+    --card: 160 47% 8%;
+    --primary: 160 84% 45%;
+    --accent: 160 84% 45%;
+    --ring: 160 84% 45%;
+    --gradient-start: 160 84% 45%;
+    --gradient-end: 142 76% 55%;
+    --glow: 160 84% 45%;
+    --glass-bg: 160 47% 11% / 0.6;
+    --target-marker: 160 60% 28%;
+  }
+
+  /* Sunset Theme */
+  .theme-sunset {
+    --background: 20 47% 6%;
+    --card: 20 47% 9%;
+    --primary: 25 95% 55%;
+    --accent: 340 82% 60%;
+    --ring: 25 95% 55%;
+    --gradient-start: 25 95% 55%;
+    --gradient-end: 340 82% 60%;
+    --glow: 25 95% 55%;
+    --glass-bg: 20 47% 12% / 0.6;
+    --target-marker: 25 70% 35%;
+  }
+
+  /* Graphite Theme */
+  .theme-graphite {
+    --background: 0 0% 6%;
+    --card: 0 0% 10%;
+    --primary: 215 14% 55%;
+    --accent: 215 14% 55%;
+    --ring: 215 14% 55%;
+    --gradient-start: 215 14% 55%;
+    --gradient-end: 215 20% 65%;
+    --glow: 215 14% 55%;
+    --glass-bg: 0 0% 13% / 0.6;
+    --target-marker: 215 14% 35%;
+  }
+
+  /* Custom accent theme */
+  .theme-custom {
+    --primary: var(--custom-accent-h) var(--custom-accent-s) var(--custom-accent-l);
+    --accent: var(--custom-accent-h) var(--custom-accent-s) var(--custom-accent-l);
+    --ring: var(--custom-accent-h) var(--custom-accent-s) var(--custom-accent-l);
+    --gradient-start: var(--custom-accent-h) var(--custom-accent-s) var(--custom-accent-l);
+    --gradient-end: var(--custom-accent-h) calc(var(--custom-accent-s) * 1.1) calc(var(--custom-accent-l) * 1.15);
+    --glow: var(--custom-accent-h) var(--custom-accent-s) var(--custom-accent-l);
+    --target-marker: var(--custom-accent-h) calc(var(--custom-accent-s) * 0.6) calc(var(--custom-accent-l) * 0.6);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-card/60 backdrop-blur-xl border border-white/10 rounded-3xl;
+  }
+
+  .glass-button {
+    @apply bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl hover:bg-white/10 transition-all duration-200;
+  }
+
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent;
+  }
+
+  .glow-effect {
+    box-shadow: 0 0 40px hsl(var(--glow) / 0.3);
+  }
+
+  .glow-effect-sm {
+    box-shadow: 0 0 20px hsl(var(--glow) / 0.2);
+  }
+
+  .warning-glow {
+    box-shadow: 0 0 30px hsl(var(--warning) / 0.4);
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .danger-glow {
+    box-shadow: 0 0 30px hsl(var(--danger) / 0.4);
+  }
+
+  .success-glow {
+    box-shadow: 0 0 30px hsl(var(--success) / 0.3);
+  }
+  
+  .slide-in-bottom {
+    animation: slideInBottom 0.5s ease-out forwards;
+  }
+  
+  .slide-in-left {
+    animation: slideInLeft 0.4s ease-out forwards;
+  }
+  
+  .slide-in-right {
+    animation: slideInRight 0.4s ease-out forwards;
+  }
+  
+  .fade-in-up {
+    animation: fadeInUp 0.5s ease-out forwards;
+  }
+}
+
+@layer utilities {
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--muted-foreground) / 0.3) 50%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+  
+  .pb-safe {
+    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes slideInBottom {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes countdown-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+}
