@@ -57,7 +57,7 @@ export function BeverageSplit({ logs, compact = false }: BeverageSplitProps) {
   if (compact) {
     return (
       <div className="space-y-2">
-        {/* Progress bar */}
+        
         <div className="h-3 rounded-full overflow-hidden flex bg-muted/30">
           {splits.map((split, i) => (
             <motion.div
@@ -69,8 +69,7 @@ export function BeverageSplit({ logs, compact = false }: BeverageSplitProps) {
             />
           ))}
         </div>
-        
-        {/* Legend */}
+
         <div className="flex flex-wrap gap-x-3 gap-y-1">
           {splits.map(split => (
             <div key={split.name} className="flex items-center gap-1.5 text-xs">
@@ -87,8 +86,7 @@ export function BeverageSplit({ logs, compact = false }: BeverageSplitProps) {
   return (
     <div className="space-y-3">
       <h4 className="text-sm font-medium text-muted-foreground">Beverage Breakdown</h4>
-      
-      {/* Progress bar */}
+
       <div className="h-4 rounded-full overflow-hidden flex bg-muted/30">
         {splits.map((split, i) => (
           <motion.div
@@ -100,8 +98,7 @@ export function BeverageSplit({ logs, compact = false }: BeverageSplitProps) {
           />
         ))}
       </div>
-      
-      {/* Detailed list */}
+
       <div className="grid grid-cols-2 gap-2">
         {splits.map(split => (
           <div key={split.name} className="flex items-center gap-2 p-2 bg-card/40 rounded-lg">

@@ -24,7 +24,7 @@ export function TargetTracker() {
       </div>
 
       <div className="relative h-4 bg-muted/30 rounded-full overflow-hidden">
-        {/* Progress bar */}
+        
         <motion.div
           className={`absolute inset-y-0 left-0 rounded-full ${
             onTrack ? 'bg-gradient-to-r from-success to-emerald-400' : 'bg-gradient-to-r from-warning to-orange-400'
@@ -34,7 +34,6 @@ export function TargetTracker() {
           transition={{ duration: 0.8, ease: 'easeOut' }}
         />
 
-        {/* Expected target marker - thicker and darker shade */}
         <motion.div
           className="absolute top-1/2 -translate-y-1/2 w-1.5 h-6 rounded-full shadow-lg"
           style={{
@@ -46,7 +45,6 @@ export function TargetTracker() {
           transition={{ duration: 0.5, delay: 0.3 }}
         />
 
-        {/* Warning glow when behind */}
         {!onTrack && (
           <motion.div
             className="absolute inset-0 rounded-full"

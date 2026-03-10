@@ -63,29 +63,22 @@ export function ProfileCreate() {
     quiet_hours_end: '07:00',
     theme: 'midnight',
     selected_beverages: ['Water', 'Tea', 'Coffee'] as string[],
-  });
-
-  // Apply theme preview live when step 7 is active
+  });
   useEffect(() => {
     if (step === 7) {
       const theme = themes.find(t => t.id === formData.theme);
-      const root = document.documentElement;
-      
-      // Remove all theme classes
+      const root = document.documentElement;
       themes.forEach(t => {
         if (t.className) {
           root.classList.remove(t.className);
         }
-      });
-      
-      // Add current theme class
+      });
       if (theme?.className) {
         root.classList.add(theme.className);
       }
     }
     
-    return () => {
-      // Cleanup only when leaving step 7
+    return () => {
       if (step === 7) {
         const root = document.documentElement;
         themes.forEach(t => {
@@ -99,9 +92,7 @@ export function ProfileCreate() {
 
   const updateForm = (updates: Partial<typeof formData>) => {
     setFormData(prev => ({ ...prev, ...updates }));
-  };
-
-  // Convert height from ft/in to cm
+  };
   const getHeightCm = (): number | null => {
     if (formData.use_metric) {
       return formData.height ? parseFloat(formData.height) : null;
@@ -110,9 +101,7 @@ export function ProfileCreate() {
     const inches = parseFloat(formData.height_in) || 0;
     if (ft === 0 && inches === 0) return null;
     return Math.round((ft * 30.48) + (inches * 2.54));
-  };
-
-  // Convert weight from lb to kg
+  };
   const getWeightKg = (): number | null => {
     if (formData.use_metric) {
       return formData.weight ? parseFloat(formData.weight) : null;
@@ -120,18 +109,11 @@ export function ProfileCreate() {
     const lb = parseFloat(formData.weight_lb);
     if (!lb) return null;
     return Math.round(lb * 0.453592);
-  };
-
-  // National Academies Adequate Intake baseline
-  const calculateGoal = () => {
-    // Baseline: 3.7 L/day for men, 2.7 L/day for women
-    let baselineMl = formData.gender === 'male' ? 3700 : formData.gender === 'female' ? 2700 : 3200;
-    
-    // Adjust for activity level
+  };
+  const calculateGoal = () => {
+    let baselineMl = formData.gender === 'male' ? 3700 : formData.gender === 'female' ? 2700 : 3200;
     const activityMultiplier = formData.activity_level === 'high' ? 1.15 : formData.activity_level === 'moderate' ? 1.0 : 0.85;
-    baselineMl = baselineMl * activityMultiplier;
-    
-    // Adjust for age if provided (slight reduction for older adults)
+    baselineMl = baselineMl * activityMultiplier;
     const age = parseInt(formData.age);
     if (age && age > 65) {
       baselineMl = baselineMl * 0.95;
@@ -203,9 +185,7 @@ export function ProfileCreate() {
     });
 
     if (profile) {
-      setCurrentProfile(profile);
-      
-      // Add selected beverages to the user's library
+      setCurrentProfile(profile);
       for (const bevName of formData.selected_beverages) {
         const defaultBev = DEFAULT_BEVERAGES.find(b => b.name === bevName);
         if (defaultBev) {
@@ -243,7 +223,7 @@ export function ProfileCreate() {
         animate={{ opacity: 1 }}
         className="min-h-screen px-4 py-10"
       >
-        {/* Header */}
+        
         <div className="mb-6">
           <button
             onClick={handleBack}
@@ -255,8 +235,7 @@ export function ProfileCreate() {
           
           <h1 className="text-xl font-bold text-foreground">Create Profile</h1>
           <p className="text-sm text-muted-foreground">Step {step} of {totalSteps}</p>
-          
-          {/* Progress */}
+
           <div className="flex gap-2 mt-3">
             {Array.from({ length: totalSteps }).map((_, i) => (
               <div
@@ -269,7 +248,6 @@ export function ProfileCreate() {
           </div>
         </div>
 
-        {/* Steps */}
         <div className="space-y-4 mb-6">
           {step === 1 && (
             <motion.div
@@ -695,8 +673,7 @@ export function ProfileCreate() {
                   </motion.button>
                 ))}
               </div>
-              
-              {/* Theme preview card */}
+
               <div className="glass-card p-4 mt-4">
                 <p className="text-sm text-muted-foreground mb-2">Preview</p>
                 <div className="flex items-center gap-3">
@@ -713,7 +690,6 @@ export function ProfileCreate() {
           )}
         </div>
 
-        {/* Actions */}
         <div className="flex gap-3">
           {step < totalSteps ? (
             <Button

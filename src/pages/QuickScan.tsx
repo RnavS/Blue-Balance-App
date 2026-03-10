@@ -25,7 +25,6 @@ interface BeverageData {
   beverage_type: string;
 }
 
-// Local cache for barcode lookups
 const barcodeCache: Record<string, BeverageData> = {};
 
 const normalizeBarcode = (value: string) =>
@@ -37,7 +36,6 @@ const getBarcodeLookupCandidates = (raw: string): string[] => {
 
   const variants = new Set<string>([code]);
 
-  // UPC-A (12) <-> EAN-13 (13 with leading 0)
   if (/^\d+$/.test(code)) {
     if (code.length === 12) variants.add(`0${code}`);
     if (code.length === 13 && code.startsWith('0')) variants.add(code.slice(1));
@@ -47,7 +45,7 @@ const getBarcodeLookupCandidates = (raw: string): string[] => {
 };
 
 const isLikelyBarcodeLength = (code: string) => {
-  // Common lengths + allow longer Code128-style values
+
   return [8, 12, 13, 14].includes(code.length) || code.length >= 6;
 };
 
@@ -103,7 +101,6 @@ export function QuickScan() {
 
     const lookupCandidates = getBarcodeLookupCandidates(normalizedBarcode);
 
-    // Check local cache first (all variants)
     for (const candidate of lookupCandidates) {
       if (barcodeCache[candidate]) {
         setBeverageFromData(barcodeCache[candidate], normalizedBarcode);
@@ -112,7 +109,6 @@ export function QuickScan() {
       }
     }
 
-    // Check saved scanned beverages (all variants)
     const savedBeverage = scannedBeverages.find((b) =>
       lookupCandidates.includes(normalizeBarcode(b.barcode))
     );
@@ -130,7 +126,7 @@ export function QuickScan() {
     }
 
     try {
-      // Try Open Food Facts with barcode variants (helps with UPC/EAN leading-zero issues)
+
       for (const candidate of lookupCandidates) {
         const offResponse = await fetch(`https://world.openfoodfacts.org/api/v2/product/${candidate}.json`);
         const offData = await offResponse.json();
@@ -139,7 +135,6 @@ export function QuickScan() {
           const product = offData.product;
           const name = product.product_name || product.product_name_en || 'Unknown Beverage';
 
-          // Try to determine serving size from product data
           let servingSize = unitPreference === 'oz' ? 12 : 355;
           if (product.serving_size) {
             const match = product.serving_size.match(/(\d+\.?\d*)\s*(ml|oz|fl)/i);
@@ -154,7 +149,6 @@ export function QuickScan() {
             }
           }
 
-          // Estimate hydration factor based on category tags
           let hydrationFactor = 0.85;
           const categories = (product.categories_tags || []).join(' ').toLowerCase();
 
@@ -179,7 +173,6 @@ export function QuickScan() {
             beverage_type: name,
           };
 
-          // Cache all variants so future lookups are fast
           lookupCandidates.forEach((v) => {
             barcodeCache[v] = data;
           });
@@ -198,7 +191,6 @@ export function QuickScan() {
       console.error('Open Food Facts lookup failed:', error);
     }
 
-    // Fallback: Allow manual creation
     const defaultData: BeverageData = {
       name: 'Unknown Beverage',
       serving_size: unitPreference === 'oz' ? 12 : 355,
@@ -224,7 +216,7 @@ export function QuickScan() {
     try {
       zxingReaderRef.current?.reset?.();
     } catch {
-      // ignore
+
     }
 
     if (streamRef.current) {
@@ -251,7 +243,6 @@ export function QuickScan() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Initialize native detector once
     if (!barcodeDetectorRef.current && 'BarcodeDetector' in window) {
       try {
         barcodeDetectorRef.current = new (window as any).BarcodeDetector({
@@ -262,12 +253,10 @@ export function QuickScan() {
       }
     }
 
-    // Initialize ZXing fallback once
     if (!zxingReaderRef.current) {
       zxingReaderRef.current = new BrowserMultiFormatReader();
     }
 
-    // Scan every 350ms
     scanIntervalRef.current = window.setInterval(async () => {
       if (scanBusyRef.current) return;
       if (!videoRef.current || !canvasRef.current) return;
@@ -282,7 +271,6 @@ export function QuickScan() {
 
         let rawValue: string | null = null;
 
-        // 1) Native BarcodeDetector first (fast when supported)
         if (barcodeDetectorRef.current) {
           try {
             const barcodes = await barcodeDetectorRef.current.detect(canvas);
@@ -290,17 +278,16 @@ export function QuickScan() {
               rawValue = barcodes[0]?.rawValue ?? null;
             }
           } catch {
-            // ignore and fallback to ZXing
+
           }
         }
 
-        // 2) ZXing fallback for browsers where native API is missing/weaker
         if (!rawValue && zxingReaderRef.current) {
           try {
             const result: any = await (zxingReaderRef.current as any).decodeFromCanvas(canvas);
             rawValue = result?.getText?.() ?? result?.text ?? null;
           } catch {
-            // normal if no barcode in frame
+
           }
         }
 
@@ -308,7 +295,6 @@ export function QuickScan() {
           const normalized = normalizeBarcode(rawValue);
           if (!normalized) return;
 
-          // Debounce same barcode for 2s
           const now = Date.now();
           const duplicateTooSoon =
             lastDetectedRef.current.value === normalized &&
@@ -338,7 +324,6 @@ export function QuickScan() {
         throw new Error('MediaDevices API not supported');
       }
 
-      // Request camera with rear preference
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: { ideal: 'environment' },
@@ -396,7 +381,7 @@ export function QuickScan() {
       try {
         zxingReaderRef.current?.reset?.();
       } catch {
-        // ignore
+
       }
       stopCamera();
     };
@@ -440,10 +425,8 @@ export function QuickScan() {
       return;
     }
 
-    // Log the beverage
     await addWaterLog(amount, editName || 'Beverage', hydrationFactor);
 
-    // Save to scanned beverages if not already saved
     if (!scannedBeverages.find((b) => normalizeBarcode(b.barcode) === normalizeBarcode(scannedBarcode))) {
       await addScannedBeverage({
         barcode: scannedBarcode,
@@ -488,7 +471,7 @@ export function QuickScan() {
       exit={{ opacity: 0 }}
       className="min-h-screen pb-32 px-4"
     >
-      {/* Header */}
+      
       <header className="pt-10 pb-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -512,9 +495,8 @@ export function QuickScan() {
         </div>
       </header>
 
-      {/* Main Content */}
       <div className="space-y-4">
-        {/* Camera Preview */}
+        
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -531,7 +513,7 @@ export function QuickScan() {
                   className="absolute inset-0 w-full h-full object-cover"
                   style={{ transform: 'none' }}
                 />
-                {/* Scan frame overlay */}
+                
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="relative w-56 h-36">
                     <div className="absolute top-0 left-0 w-8 h-8 border-t-2 border-l-2 border-primary rounded-tl-lg" />
@@ -586,7 +568,6 @@ export function QuickScan() {
           </div>
         </motion.div>
 
-        {/* Manual Entry */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -616,7 +597,6 @@ export function QuickScan() {
           </div>
         </motion.div>
 
-        {/* Scanned History */}
         <AnimatePresence>
           {showHistory && scannedBeverages.length > 0 && (
             <motion.div
@@ -666,7 +646,6 @@ export function QuickScan() {
         </AnimatePresence>
       </div>
 
-      {/* Confirm Modal */}
       <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
         <DialogContent className="glass-card border-white/10 max-w-sm bg-card">
           <DialogHeader>

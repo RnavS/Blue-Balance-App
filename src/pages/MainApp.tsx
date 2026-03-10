@@ -10,8 +10,10 @@ import { History } from '@/pages/History';
 import { Settings } from '@/pages/Settings';
 import { QuickScan } from '@/pages/QuickScan';
 import { AICoach } from '@/pages/AICoach';
+import { useWidgetSync } from '@/hooks/useWidgetSync';
 
 export function MainApp() {
+  useWidgetSync();
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const { currentProfile, loading: profileLoading } = useProfile();

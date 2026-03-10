@@ -53,7 +53,7 @@ export function ProfilePicker() {
       animate={{ opacity: 1 }}
       className="min-h-screen px-6 py-12"
     >
-      {/* Header */}
+      
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Choose Profile</h1>
@@ -70,7 +70,6 @@ export function ProfilePicker() {
         </Button>
       </div>
 
-      {/* Profiles Grid */}
       <div className="space-y-4 mb-8">
         <AnimatePresence>
           {profiles.map((profile, index) => (
@@ -126,7 +125,6 @@ export function ProfilePicker() {
         )}
       </div>
 
-      {/* Create New Profile Button */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -141,7 +139,6 @@ export function ProfilePicker() {
         </Button>
       </motion.div>
 
-      {/* Delete Confirmation */}
       <AlertDialog open={!!profileToDelete} onOpenChange={() => setProfileToDelete(null)}>
         <AlertDialogContent className="glass-card border-white/10">
           <AlertDialogHeader>

@@ -11,18 +11,14 @@ export function ProgressRing() {
   const intake = getTodayIntake();
   const goal = currentProfile.daily_goal;
   const percentage = Math.min((intake / goal) * 100, 100);
-  const onTrack = isOnTrack();
-
-  // Calculate expected percentage for target marker
+  const onTrack = isOnTrack();
   const expectedPercentage = Math.min((expectedIntake / goal) * 100, 100);
 
   const size = 240;
   const strokeWidth = 12;
   const radius = (size - strokeWidth) / 2;
   const circumference = radius * 2 * Math.PI;
-  const offset = circumference - (percentage / 100) * circumference;
-
-  // Calculate expected marker position
+  const offset = circumference - (percentage / 100) * circumference;
   const expectedAngle = (expectedPercentage / 100) * 360 - 90; // -90 to start from top
   const expectedMarkerX = size / 2 + radius * Math.cos((expectedAngle * Math.PI) / 180);
   const expectedMarkerY = size / 2 + radius * Math.sin((expectedAngle * Math.PI) / 180);
@@ -32,7 +28,7 @@ export function ProgressRing() {
   return (
     <div className="relative flex items-center justify-center">
       <svg width={size} height={size} className="transform -rotate-90">
-        {/* Background circle */}
+        
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -42,7 +38,7 @@ export function ProgressRing() {
           strokeWidth={strokeWidth}
           className="opacity-30"
         />
-        {/* Progress circle - uses theme colors */}
+        
         <motion.circle
           cx={size / 2}
           cy={size / 2}
@@ -57,7 +53,7 @@ export function ProgressRing() {
           transition={{ duration: 1, ease: 'easeOut' }}
           className={onTrack || percentage >= 100 ? 'drop-shadow-[0_0_15px_hsl(var(--primary)/0.5)]' : 'drop-shadow-[0_0_15px_hsl(var(--destructive)/0.5)]'}
         />
-        {/* Expected target marker */}
+        
         {expectedPercentage > 0 && expectedPercentage < 100 && (
           <circle
             cx={expectedMarkerX}
@@ -69,7 +65,6 @@ export function ProgressRing() {
         )}
       </svg>
 
-      {/* Center content */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <motion.span
           className={`text-5xl font-bold ${onTrack || percentage >= 100 ? 'text-foreground' : 'text-destructive'}`}
@@ -88,7 +83,6 @@ export function ProgressRing() {
         </span>
       </div>
 
-      {/* Glow effect when complete */}
       {percentage >= 100 && (
         <motion.div
           className="absolute inset-0 rounded-full"

@@ -3,9 +3,7 @@ import { useProfile } from '@/contexts/ProfileContext';
 
 export function useTargetProgress() {
   const { currentProfile, getTodayIntake, getExpectedIntake, getExpectedRange, isOnTrack } = useProfile();
-  const [tick, setTick] = useState(0);
-
-  // Force re-calculation every 30 seconds
+  const [tick, setTick] = useState(0);
   useEffect(() => {
     const interval = setInterval(() => {
       setTick(prev => prev + 1);

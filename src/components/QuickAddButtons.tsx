@@ -27,9 +27,7 @@ export function QuickAddButtons({ onManageBeverages }: QuickAddButtonsProps) {
 
   if (!currentProfile) return null;
 
-  const unit = currentProfile.unit_preference;
-  
-  // Get user's beverage library or use defaults
+  const unit = currentProfile.unit_preference;
   const userBeverages = beverages.length > 0 ? beverages : DEFAULT_BEVERAGES.slice(0, 3).map(b => ({
     id: b.name,
     profile_id: '',
@@ -39,9 +37,7 @@ export function QuickAddButtons({ onManageBeverages }: QuickAddButtonsProps) {
     icon: b.icon,
     is_default: true,
     created_at: '',
-  }));
-
-  // Create preset buttons from user's beverages (first 3)
+  }));
   const presetBeverages = userBeverages.slice(0, 3).map(bev => ({
     label: `${bev.serving_size} ${unit} ${bev.name}`,
     value: bev.serving_size,
@@ -107,9 +103,7 @@ export function QuickAddButtons({ onManageBeverages }: QuickAddButtonsProps) {
     const logDate = new Date(log.logged_at);
     const today = new Date();
     return logDate.toDateString() === today.toDateString();
-  });
-
-  // All available beverage types for custom modal
+  });
   const allBeverageTypes = [
     ...userBeverages.map(b => b.name),
     ...DEFAULT_BEVERAGES.map(b => b.name).filter(name => !userBeverages.find(ub => ub.name === name))
@@ -184,7 +178,6 @@ export function QuickAddButtons({ onManageBeverages }: QuickAddButtonsProps) {
         <span>Custom Amount</span>
       </motion.button>
 
-      {/* Custom Amount Modal */}
       <Dialog open={showCustomModal} onOpenChange={setShowCustomModal}>
         <DialogContent className="glass-card border-white/10 sm:max-w-sm bg-card">
           <DialogHeader>

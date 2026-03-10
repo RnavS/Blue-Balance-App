@@ -2,24 +2,26 @@ import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
     const { message, context, history } = await req.json();
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
+
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    const OPENAI_MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini";
+
+    if (!OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY is not configured");
     }
 
-const systemPrompt = `You are Blue Balance AI Coach, a friendly and knowledgeable hydration assistant.
+    const systemPrompt = `You are Blue Balance AI Coach, a friendly and knowledgeable hydration assistant.
 
 CRITICAL FORMATTING RULES:
 - Write in plain text only. NO asterisks, NO bold markers (**), NO markdown formatting.
@@ -30,7 +32,6 @@ CRITICAL FORMATTING RULES:
 YOUR ROLE:
 1. Answer questions about hydration using the user's actual data.
 2. Make settings changes when requested (include action JSON at end).
-3. Provide clickable links when users ask where to buy products.
 
 RESPONSE GUIDELINES:
 - Be specific and use numbers from the user's data.
@@ -48,80 +49,74 @@ SETTINGS ACTIONS (add this JSON at the END of your response when user requests c
 
 Available themes: midnight, ocean, mint, sunset, graphite
 
-SHOPPING LINKS (use markdown format for clickable links):
-When user asks where to buy water bottles, filters, etc:
-- [Search on Amazon](https://amazon.com/s?k=reusable+water+bottle)
-- [Search on Google](https://google.com/search?tbm=shop&q=water+bottle)
-
 Current User Context:
-${context}`;
+${context ?? ""}`;
 
     const messages = [
-      { role: 'system', content: systemPrompt },
-      ...history,
-      { role: 'user', content: message }
+      { role: "system", content: systemPrompt },
+      ...(Array.isArray(history) ? history : []),
+      { role: "user", content: String(message ?? "") },
     ];
 
-    console.log('Calling AI Gateway with messages:', messages.length);
-
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
+    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
       headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: OPENAI_MODEL,
         messages,
+        temperature: 0.6,
       }),
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI Gateway error:', response.status, errorText);
-      
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ 
-          response: "I'm receiving too many requests right now. Please try again in a moment.",
-          error: 'rate_limited'
-        }), {
-          status: 429,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error("OpenAI error:", resp.status, errText);
+
+      if (resp.status === 429) {
+        return new Response(
+          JSON.stringify({
+            response: "I'm receiving too many requests right now. Please try again in a moment.",
+            error: "rate_limited",
+          }),
+          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
       }
-      
-      throw new Error('AI Gateway error');
+
+      throw new Error(`OpenAI API error (${resp.status})`);
     }
 
-    const data = await response.json();
-    let responseText = data.choices?.[0]?.message?.content || "I'm here to help with your hydration goals!";
-    
-    console.log('AI Response received:', responseText.substring(0, 100));
-    
-    // Parse action from response
-    let action = null;
-    const actionMatch = responseText.match(/\{"action":\s*\{[^}]+\}\}/);
+    const data = await resp.json();
+    let responseText =
+      data?.choices?.[0]?.message?.content ??
+      "I'm here to help with your hydration goals!";
+
+    // Parse action JSON from response (optional)
+    let action: any = null;
+    const actionMatch = responseText.match(/\{"action":\s*\{[\s\S]*?\}\}/);
     if (actionMatch) {
       try {
         const parsed = JSON.parse(actionMatch[0]);
-        action = parsed.action;
-        responseText = responseText.replace(actionMatch[0], '').trim();
+        action = parsed.action ?? null;
+        responseText = responseText.replace(actionMatch[0], "").trim();
       } catch (e) {
-        console.log('Could not parse action:', e);
+        console.log("Could not parse action JSON:", e);
       }
     }
 
     return new Response(JSON.stringify({ response: responseText, action }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {
-    console.error('AI Coach error:', error);
-    return new Response(JSON.stringify({ 
-      response: "I'm having trouble connecting right now. Please try again!",
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    console.error("AI Coach error:", error);
+    return new Response(
+      JSON.stringify({
+        response: "I'm having trouble connecting right now. Please try again!",
+        error: error instanceof Error ? error.message : "Unknown error",
+      }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   }
 });

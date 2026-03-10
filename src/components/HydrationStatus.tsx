@@ -11,13 +11,9 @@ export function HydrationStatus() {
   const expected = getExpectedIntake();
   const onTrack = isOnTrack();
   const goal = currentProfile.daily_goal;
-  const unit = currentProfile.unit_preference;
-
-  // Calculate expected range (±10%)
+  const unit = currentProfile.unit_preference;
   const minExpected = Math.round(expected * 0.9);
-  const maxExpected = Math.round(expected * 1.1);
-
-  // Calculate time left
+  const maxExpected = Math.round(expected * 1.1);
   const now = new Date();
   const [sleepHour, sleepMin] = currentProfile.sleep_time.split(':').map(Number);
   const sleepTime = new Date(now);

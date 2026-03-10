@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, RefreshCw, Lightbulb } from 'lucide-react';
 import { useProfile } from '@/contexts/ProfileContext';
-import { supabase } from '@/integrations/supabase/client';
+
+import { supabase } from '@/integrations/Supabase/client';
 
 export function AITipGenerator() {
   const { currentProfile, getTodayIntake, getExpectedIntake, isOnTrack, waterLogs } = useProfile();
@@ -21,7 +22,6 @@ export function AITipGenerator() {
       const expected = getExpectedIntake();
       const onTrack = isOnTrack();
 
-      // Calculate time left
       const now = new Date();
       const [sleepHour, sleepMin] = currentProfile.sleep_time.split(':').map(Number);
       const sleepTime = new Date(now);
@@ -31,7 +31,6 @@ export function AITipGenerator() {
       }
       const timeLeft = Math.max(0, (sleepTime.getTime() - now.getTime()) / (1000 * 60 * 60));
 
-      // Calculate recent trend
       const todayLogs = waterLogs.filter(log => {
         const logDate = new Date(log.logged_at);
         const today = new Date();
@@ -57,7 +56,7 @@ export function AITipGenerator() {
       setLastContext(`${intake}-${onTrack}-${recentTrend}`);
     } catch (error) {
       console.error('Error generating tip:', error);
-      // Fallback tip
+
       const fallbackTips = [
         "Stay consistent! Regular small sips are better than large amounts at once.",
         "Try setting a water bottle next to your workspace for easy access.",
@@ -69,7 +68,6 @@ export function AITipGenerator() {
     }
   }, [currentProfile, getTodayIntake, getExpectedIntake, isOnTrack, waterLogs, isLoading]);
 
-  // Auto-generate tip on mount and when context changes significantly
   useEffect(() => {
     if (!currentProfile || tip) return;
     
@@ -82,15 +80,13 @@ export function AITipGenerator() {
     }
   }, [currentProfile, tip, getTodayIntake, isOnTrack, lastContext, generateTip]);
 
-  // Auto-update when user logs water or falls behind
   useEffect(() => {
     if (!currentProfile) return;
     
     const intake = getTodayIntake();
     const onTrack = isOnTrack();
     const goal = currentProfile.daily_goal;
-    
-    // Trigger new tip on significant events
+
     if (intake >= goal && tip && !tip.includes('goal')) {
       generateTip();
     }

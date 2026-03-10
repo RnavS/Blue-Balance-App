@@ -13,7 +13,7 @@ export function Welcome() {
       animate={{ opacity: 1 }}
       className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden"
     >
-      {/* Background glow effects */}
+      
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-primary/20 rounded-full blur-3xl" />
         <div className="absolute bottom-1/4 left-1/4 w-64 h-64 bg-accent/10 rounded-full blur-2xl" />
@@ -25,7 +25,7 @@ export function Welcome() {
         transition={{ delay: 0.2, duration: 0.5 }}
         className="relative z-10 text-center"
       >
-        {/* Logo */}
+        
         <motion.div
           initial={{ y: -20 }}
           animate={{ y: 0 }}
@@ -42,7 +42,6 @@ export function Welcome() {
           </div>
         </motion.div>
 
-        {/* Title */}
         <motion.h1
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -61,7 +60,6 @@ export function Welcome() {
           Smart hydration tracking with AI-powered coaching
         </motion.p>
 
-        {/* Features */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -79,7 +77,6 @@ export function Welcome() {
           </div>
         </motion.div>
 
-        {/* CTA Button */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}

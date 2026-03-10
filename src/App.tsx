@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProfileProvider, useProfile } from "@/contexts/ProfileContext";
+import { PremiumProvider } from "@/contexts/PremiumContext";
 import { Welcome } from "@/pages/Welcome";
 import { Auth } from "@/pages/Auth";
 import { ProfilePicker } from "@/pages/ProfilePicker";
@@ -75,9 +76,11 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
-          <ProfileProvider>
-            <AppRoutes />
-          </ProfileProvider>
+          <PremiumProvider>
+            <ProfileProvider>
+              <AppRoutes />
+            </ProfileProvider>
+          </PremiumProvider>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

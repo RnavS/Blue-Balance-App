@@ -135,13 +135,13 @@ export function Auth() {
       animate={{ opacity: 1 }}
       className="min-h-screen flex flex-col items-center justify-center px-6 relative overflow-hidden"
     >
-      {/* Background */}
+      
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-primary/20 rounded-full blur-3xl" />
       </div>
 
       <div className="relative z-10 w-full max-w-sm">
-        {/* Back button */}
+        
         {mode !== 'choice' && (
           <motion.button
             initial={{ opacity: 0, x: -20 }}
@@ -154,7 +154,6 @@ export function Auth() {
           </motion.button>
         )}
 
-        {/* Logo */}
         <motion.div
           initial={{ y: -20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}

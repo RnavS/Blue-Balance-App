@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar as CalendarIcon, Clock, TrendingUp, Droplet, BarChart3, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useProfile, WaterLog } from '@/contexts/ProfileContext';
+import { usePremium } from '@/contexts/PremiumContext';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { BeverageSplit } from '@/components/BeverageSplit';
@@ -60,6 +61,7 @@ function HydrationScoreGauge({ score }: { score: number }) {
 
 export function History() {
   const { currentProfile, waterLogs, getFilteredLogs, deleteWaterLog, getHydrationScore } = useProfile();
+  const { isPremium } = usePremium();
   const { toast } = useToast();
   const [activeFilter, setActiveFilter] = useState<FilterType>('day');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
@@ -88,10 +90,9 @@ export function History() {
 
   const score = useMemo(() => getHydrationScore(filteredLogs), [filteredLogs, getHydrationScore]);
 
-  // Generate chart data
   const chartData = useMemo(() => {
     if (activeFilter === 'hour') {
-      // Last 12 hours
+
       const data = [];
       const now = new Date();
       for (let i = 11; i >= 0; i--) {
@@ -114,7 +115,7 @@ export function History() {
       }
       return data;
     } else if (activeFilter === 'day') {
-      // Today by hour
+
       const data = [];
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -137,7 +138,7 @@ export function History() {
       }
       return data;
     } else if (activeFilter === 'week') {
-      // Last 7 days
+
       const data = [];
       const now = new Date();
       
@@ -160,7 +161,7 @@ export function History() {
       }
       return data;
     } else {
-      // Last 30 days
+
       const data = [];
       const now = new Date();
       
@@ -185,7 +186,6 @@ export function History() {
     }
   }, [activeFilter, waterLogs]);
 
-  // Calendar data
   const calendarDays = useMemo(() => {
     const start = startOfMonth(calendarMonth);
     const end = endOfMonth(calendarMonth);
@@ -253,12 +253,22 @@ export function History() {
             variant={activeFilter === filter.id && !selectedDate ? 'default' : 'ghost'}
             size="sm"
             onClick={() => {
+              if (filter.id === 'month' && !isPremium) {
+                toast({
+                  title: 'Premium Required',
+                  description: 'Unlock 30-day history trends with Blue Balance Premium in Settings.',
+                });
+                return;
+              }
               setActiveFilter(filter.id);
               setSelectedDate(null);
             }}
-            className={activeFilter === filter.id && !selectedDate ? 'bg-primary/20 text-foreground hover:bg-primary/30' : 'text-muted-foreground hover:text-foreground'}
+            className={activeFilter === filter.id && !selectedDate ? 'bg-primary/20 text-foreground hover:bg-primary/30 relative overflow-hidden' : 'text-muted-foreground hover:text-foreground relative overflow-hidden'}
           >
             {filter.label}
+            {filter.id === 'month' && !isPremium && (
+               <span className="ml-1 opacity-70"><svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"><path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14"/></svg></span>
+            )}
           </Button>
         ))}
       </motion.div>
@@ -278,7 +288,6 @@ export function History() {
         </motion.div>
       )}
 
-      {/* Hydration Score */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }} 
         animate={{ opacity: 1, y: 0 }} 
@@ -289,7 +298,6 @@ export function History() {
         <HydrationScoreGauge score={score} />
       </motion.div>
 
-      {/* Chart */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }} 
         animate={{ opacity: 1, y: 0 }} 
@@ -336,7 +344,6 @@ export function History() {
         </div>
       </motion.div>
 
-      {/* Beverage Split */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }} 
         animate={{ opacity: 1, y: 0 }} 
@@ -346,7 +353,6 @@ export function History() {
         <BeverageSplit logs={filteredLogs} />
       </motion.div>
 
-      {/* Stats */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="grid grid-cols-3 gap-2 mb-4">
         <div className="glass-card p-3 text-center">
           <Droplet className="w-4 h-4 mx-auto mb-1 text-primary" />
@@ -365,7 +371,6 @@ export function History() {
         </div>
       </motion.div>
 
-      {/* Calendar */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }} 
         animate={{ opacity: 1, y: 0 }} 
@@ -393,7 +398,7 @@ export function History() {
         </div>
         
         <div className="grid grid-cols-7 gap-1">
-          {/* Empty cells for days before start of month */}
+          
           {Array.from({ length: calendarDays[0]?.getDay() || 0 }).map((_, i) => (
             <div key={`empty-${i}`} className="aspect-square" />
           ))}
@@ -413,7 +418,7 @@ export function History() {
                   isSelected ? 'ring-2 ring-primary' : ''
                 } ${isTodayDate ? 'bg-primary/20' : 'hover:bg-card/60'}`}
               >
-                {/* Progress fill */}
+                
                 <div 
                   className="absolute bottom-0 left-0 right-0 bg-primary/30 transition-all"
                   style={{ height: `${percentage}%` }}
@@ -427,7 +432,6 @@ export function History() {
         </div>
       </motion.div>
 
-      {/* Recent Entries */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="glass-card p-4">
         <h3 className="text-sm font-medium text-muted-foreground mb-3">Recent Entries</h3>
         <AnimatePresence>

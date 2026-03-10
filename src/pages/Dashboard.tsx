@@ -61,7 +61,7 @@ export function Dashboard() {
       exit={{ opacity: 0 }}
       className="min-h-screen pb-32 px-4"
     >
-      {/* Header */}
+      
       <header className="pt-10 pb-4">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -80,9 +80,8 @@ export function Dashboard() {
         </motion.div>
       </header>
 
-      {/* Main Content */}
       <div className="space-y-4">
-        {/* Progress Ring */}
+        
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -92,7 +91,6 @@ export function Dashboard() {
           <ProgressRing />
         </motion.div>
 
-        {/* Hydration Status */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -101,7 +99,6 @@ export function Dashboard() {
           <HydrationStatus />
         </motion.div>
 
-        {/* Interval Tracker */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -111,7 +108,6 @@ export function Dashboard() {
           <IntervalTracker />
         </motion.div>
 
-        {/* Beverage Split */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -121,7 +117,6 @@ export function Dashboard() {
           <BeverageSplit compact />
         </motion.div>
 
-        {/* Quick Add with + Beverage button */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -140,7 +135,6 @@ export function Dashboard() {
           </Button>
         </motion.div>
 
-        {/* Stats */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -150,14 +144,13 @@ export function Dashboard() {
         </motion.div>
       </div>
 
-      {/* Beverage Management Modal */}
       <Dialog open={showBeverageModal} onOpenChange={setShowBeverageModal}>
         <DialogContent className="glass-card border-white/10 sm:max-w-md bg-card">
           <DialogHeader>
             <DialogTitle className="text-foreground">Manage Beverages</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
-            {/* Add new beverage */}
+            
             <div className="space-y-3">
               <h4 className="text-sm font-medium text-foreground">Add New Beverage</h4>
               <div className="grid grid-cols-3 gap-2">
@@ -194,7 +187,6 @@ export function Dashboard() {
               </div>
             </div>
 
-            {/* Current beverages */}
             <div>
               <h4 className="text-sm font-medium text-foreground mb-2">Your Beverages</h4>
               <div className="space-y-2 max-h-48 overflow-y-auto scrollbar-hide">
@@ -229,7 +221,6 @@ export function Dashboard() {
               </div>
             </div>
 
-            {/* Quick add defaults */}
             {beverages.length === 0 && (
               <div>
                 <h4 className="text-xs text-muted-foreground mb-2">Quick add common beverages:</h4>

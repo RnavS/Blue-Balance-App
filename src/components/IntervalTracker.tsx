@@ -6,9 +6,7 @@ import { Progress } from '@/components/ui/progress';
 
 export function IntervalTracker() {
   const { currentProfile, waterLogs, getCurrentIntervalProgress } = useProfile();
-  const [, setTick] = useState(0);
-
-  // Recalculate interval progress function to get fresh data
+  const [, setTick] = useState(0);
   const getIntervalData = useCallback(() => {
     if (!currentProfile) {
       return { current: 0, target: 0, timeRemaining: 0, intervalIndex: 0, totalIntervals: 0 };
@@ -37,9 +35,7 @@ export function IntervalTracker() {
     const intervalStart = new Date(wakeTime.getTime() + intervalIndex * intervalMs);
     const intervalEnd = new Date(Math.min(intervalStart.getTime() + intervalMs, sleepTime.getTime()));
     
-    const targetPerInterval = currentProfile.daily_goal / totalIntervals;
-    
-    // Get logs for current interval
+    const targetPerInterval = currentProfile.daily_goal / totalIntervals;
     const intervalLogs = waterLogs.filter(log => {
       const logTime = new Date(log.logged_at);
       return logTime >= intervalStart && logTime < intervalEnd;
@@ -57,9 +53,7 @@ export function IntervalTracker() {
     };
   }, [currentProfile, waterLogs]);
 
-  const [intervalData, setIntervalData] = useState(getIntervalData());
-
-  // Update every second for countdown, and immediately when waterLogs change
+  const [intervalData, setIntervalData] = useState(getIntervalData());
   useEffect(() => {
     const updateData = () => {
       setIntervalData(getIntervalData());
@@ -115,7 +109,6 @@ export function IntervalTracker() {
           className="h-2"
         />
 
-        {/* Interval dots */}
         <div className="flex gap-1 pt-1">
           {Array.from({ length: Math.min(totalIntervals, 12) }).map((_, i) => (
             <motion.div

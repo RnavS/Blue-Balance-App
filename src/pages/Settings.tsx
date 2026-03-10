@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings as SettingsIcon, User, Target, Bell, Clock, Palette, Trash2, ChevronDown, ChevronUp, Users, LogOut, Timer, Droplet } from 'lucide-react';
+import { Settings as SettingsIcon, User, Target, Bell, Clock, Palette, Trash2, ChevronDown, ChevronUp, Users, LogOut, Timer, Droplet, Crown, Building, CreditCard, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProfile, Profile, DEFAULT_BEVERAGES } from '@/contexts/ProfileContext';
+import { usePremium } from '@/contexts/PremiumContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -69,6 +70,9 @@ export function Settings() {
   const [customColor, setCustomColor] = useState(currentProfile?.custom_accent_color || '262 83% 58%');
   const [newBeverageName, setNewBeverageName] = useState('');
   const [newBeverageSize, setNewBeverageSize] = useState('');
+  const { isPremium, bankConnected, bankLast4, upgradeToPremium, cancelPremium, connectBank, disconnectBank, loading: premiumLoading } = usePremium();
+  const [isProcessingUpgrade, setIsProcessingUpgrade] = useState(false);
+  const [isProcessingBank, setIsProcessingBank] = useState(false);
 
   if (!currentProfile) return null;
 
@@ -124,7 +128,6 @@ export function Settings() {
         </motion.div>
       </header>
 
-      {/* Expected Range Info */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }} 
         animate={{ opacity: 1, y: 0 }} 
@@ -138,8 +141,123 @@ export function Settings() {
         </div>
       </motion.div>
 
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }} 
+        animate={{ opacity: 1, y: 0 }} 
+        transition={{ delay: 0.1 }}
+      >
+        <Section title="Premium Account" icon={Crown} defaultOpen={!isPremium}>
+          <div className="space-y-4">
+            <div className={`p-4 rounded-xl border ${isPremium ? 'border-primary/50 bg-primary/10' : 'border-white/10 bg-card/60'}`}>
+              <div className="flex justify-between items-start mb-2">
+                <div>
+                  <h3 className="font-semibold text-foreground flex items-center gap-2">
+                    Blue Balance Premium
+                    {isPremium && <span className="text-[10px] bg-primary text-primary-foreground px-2 py-0.5 rounded-full uppercase font-bold tracking-wider">Active</span>}
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {isPremium ? 'You have access to advanced AI coaching and deep history analytics.' : 'Unlock advanced AI coaching, personalized plans, and deep analytics.'}
+                  </p>
+                </div>
+                {!isPremium && (
+                  <div className="text-right">
+                    <span className="text-lg font-bold text-foreground">$8</span>
+                    <span className="text-xs text-muted-foreground block">/month</span>
+                  </div>
+                )}
+              </div>
+              
+              {!isPremium ? (
+                <Button 
+                  onClick={async () => {
+                    setIsProcessingUpgrade(true);
+                    await upgradeToPremium();
+                    setIsProcessingUpgrade(false);
+                    toast({ title: 'Welcome to Premium!', description: 'All advanced features are now unlocked.' });
+                  }} 
+                  className="w-full mt-3 bg-gradient-to-r from-primary to-violet-500 hover:from-primary/90 hover:to-violet-500/90 text-white border-0"
+                  disabled={isProcessingUpgrade}
+                >
+                  {isProcessingUpgrade ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Crown className="w-4 h-4 mr-2" />}
+                  {isProcessingUpgrade ? 'Upgrading...' : 'Upgrade Now'}
+                </Button>
+              ) : (
+                <div className="mt-4 pt-4 border-t border-primary/20 flex justify-between items-center">
+                  <span className="text-xs text-primary/80">Manage your subscription in network settings</span>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={async () => {
+                      await cancelPremium();
+                      toast({ title: 'Premium Canceled', description: 'Your subscription has been canceled.' });
+                    }} 
+                    className="h-8 text-xs text-muted-foreground hover:text-destructive"
+                  >
+                    Cancel Plan
+                  </Button>
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 rounded-xl border border-white/10 bg-card/60">
+              <h3 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
+                <Building className="w-4 h-4 text-muted-foreground" />
+                Financial Network
+              </h3>
+              
+              {bankConnected ? (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
+                      <CreditCard className="w-5 h-5 text-emerald-500" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-foreground">Bank Connected</p>
+                      <p className="text-xs text-muted-foreground">Ending in {bankLast4 || '****'}</p>
+                    </div>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={async () => {
+                      await disconnectBank();
+                      toast({ title: 'Bank Disconnected' });
+                    }} 
+                    className="border-white/10 text-xs h-8"
+                  >
+                    Disconnect
+                  </Button>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Connect your bank account to seamlessly manage your premium subscription and access financial wellness insights.
+                  </p>
+                  <Button 
+                    variant="secondary" 
+                    onClick={async () => {
+                      setIsProcessingBank(true);
+
+                      const mockLast4 = Math.floor(1000 + Math.random() * 9000).toString();
+                      await connectBank(mockLast4);
+                      setIsProcessingBank(false);
+                      toast({ title: 'Bank Connected', description: `Account ending in ${mockLast4} has been securely linked.` });
+                    }}
+                    className="w-full text-xs font-medium"
+                    disabled={isProcessingBank}
+                  >
+                    {isProcessingBank ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Building className="w-4 h-4 mr-2" />}
+                    {isProcessingBank ? 'Connecting to Plaid...' : 'Connect Bank Account'}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </Section>
+      </motion.div>
+
       <div className="space-y-3">
-        <Section title="Profile" icon={User} defaultOpen>
+        <Section title="Profile" icon={User} defaultOpen={isPremium}>
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -268,8 +386,7 @@ export function Settings() {
                 ))}
               </div>
             </div>
-            
-            {/* Custom Color Picker */}
+
             <div>
               <label className="text-xs text-muted-foreground mb-2 block">Custom Accent Color</label>
               <div className="flex items-center gap-3">

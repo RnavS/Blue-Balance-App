@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+
+import { supabase } from '@/integrations/Supabase/client';
 import { useAuth } from './AuthContext';
 
 export interface Beverage {
@@ -274,12 +275,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       fetchBeverages();
       fetchScannedBeverages();
       fetchChatMessages();
-      
-      // Apply theme
+
       document.documentElement.classList.remove('theme-ocean', 'theme-mint', 'theme-sunset', 'theme-graphite', 'theme-custom');
       if (currentProfile.theme === 'custom' && currentProfile.custom_accent_color) {
         document.documentElement.classList.add('theme-custom');
-        // Parse HSL from custom color
+
         const hsl = currentProfile.custom_accent_color.match(/\d+/g);
         if (hsl && hsl.length >= 3) {
           document.documentElement.style.setProperty('--custom-accent-h', hsl[0]);
@@ -296,41 +296,60 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     if (!user) return null;
 
     try {
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session || !session.user) {
+        throw new Error('You must be signed in to create a profile.');
+      }
+
+      const userId = session.user.id;
+      
+      const insertData = {
+        user_id: userId,
+        username: (profileData.first_name + ' ' + (profileData.last_name || '')).trim() || 'User',
+        first_name: profileData.first_name || null,
+        last_name: profileData.last_name || null,
+        age: profileData.age || null,
+        height: profileData.height || null,
+        weight: profileData.weight || null,
+        unit_preference: profileData.unit_preference || 'oz',
+        wake_time: profileData.wake_time || '07:00',
+        sleep_time: profileData.sleep_time || '22:00',
+        activity_level: profileData.activity_level || 'moderate',
+        daily_goal: profileData.daily_goal || 80,
+        interval_length: profileData.interval_length || 60,
+        theme: profileData.theme || 'midnight',
+        reminders_enabled: (profileData as any).reminders_enabled ?? true,
+        reminder_interval: (profileData as any).reminder_interval ?? 30,
+        quiet_hours_start: (profileData as any).quiet_hours_start || '22:00',
+        quiet_hours_end: (profileData as any).quiet_hours_end || '07:00',
+        sound_enabled: true,
+        vibration_enabled: true
+      };
+
+      console.log('Inserting profile for user:', userId);
+
       const { data, error } = await supabase
         .from('profiles')
-        .insert({
-          user_id: user.id,
-          username: profileData.username || 'User',
-          first_name: profileData.first_name,
-          last_name: profileData.last_name,
-          age: profileData.age,
-          height: profileData.height,
-          weight: profileData.weight,
-          unit_preference: profileData.unit_preference || 'oz',
-          wake_time: profileData.wake_time || '07:00',
-          sleep_time: profileData.sleep_time || '22:00',
-          activity_level: profileData.activity_level || 'moderate',
-          daily_goal: profileData.daily_goal || 80,
-          interval_length: profileData.interval_length || 60,
-          theme: profileData.theme || 'midnight',
-          custom_accent_color: profileData.custom_accent_color,
-          gradient_preset: profileData.gradient_preset,
-        })
+        .insert(insertData)
         .select()
         .single();
 
-      if (error) throw error;
-      
+      if (error) {
+        console.error('Supabase error creating profile:', error);
+        throw error;
+      }
+
       const typedProfile = {
         ...data,
         unit_preference: data.unit_preference as 'oz' | 'ml',
         activity_level: data.activity_level as 'light' | 'moderate' | 'high',
       } as Profile;
-      
+
       setProfiles(prev => [...prev, typedProfile]);
       return typedProfile;
-    } catch (error) {
-      console.error('Error creating profile:', error);
+    } catch (error: any) {
+      console.error('Catch-all error in createProfile:', error);
       return null;
     }
   };
@@ -548,16 +567,13 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     
     const logsToUse = logs || getFilteredLogs('day');
     const todayIntake = logsToUse.reduce((sum, log) => sum + log.amount, 0);
-    
-    // Goal completion (40%)
+
     const goalCompletion = Math.min(todayIntake / currentProfile.daily_goal, 1) * 40;
-    
-    // Pace adherence (30%)
+
     const expectedIntake = getExpectedIntake();
     const paceRatio = expectedIntake > 0 ? Math.min(todayIntake / expectedIntake, 1.2) : 1;
     const paceScore = Math.min(paceRatio, 1) * 30;
-    
-    // Consistency - logs spread throughout the day (30%)
+
     const intervalMinutes = currentProfile.interval_length;
     const [wakeHour, wakeMin] = currentProfile.wake_time.split(':').map(Number);
     const [sleepHour, sleepMin] = currentProfile.sleep_time.split(':').map(Number);
