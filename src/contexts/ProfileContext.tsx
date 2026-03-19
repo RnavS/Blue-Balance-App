@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-
-import { supabase } from '@/integrations/Supabase/client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
 
 export interface Beverage {
@@ -138,7 +138,6 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
-
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -147,17 +146,17 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      
+
       const typedData = (data || []).map(p => ({
         ...p,
         unit_preference: p.unit_preference as 'oz' | 'ml',
         activity_level: p.activity_level as 'light' | 'moderate' | 'high',
       })) as Profile[];
-      
+
       setProfiles(typedData);
-      
+
       if (typedData.length > 0 && !currentProfile) {
-        const savedProfileId = localStorage.getItem('blueBalance_currentProfile');
+        const savedProfileId = await AsyncStorage.getItem('blueBalance_currentProfile');
         const savedProfile = typedData.find(p => p.id === savedProfileId);
         setCurrentProfile(savedProfile || typedData[0]);
       }
@@ -169,22 +168,16 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   }, [user, currentProfile]);
 
   const fetchWaterLogs = useCallback(async () => {
-    if (!currentProfile) {
-      setWaterLogs([]);
-      return;
-    }
-
+    if (!currentProfile) { setWaterLogs([]); return; }
     try {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
       const { data, error } = await supabase
         .from('water_logs')
         .select('*')
         .eq('profile_id', currentProfile.id)
         .gte('logged_at', thirtyDaysAgo.toISOString())
         .order('logged_at', { ascending: false });
-
       if (error) throw error;
       setWaterLogs((data || []).map(log => ({ ...log, amount: Number(log.amount) })));
     } catch (error) {
@@ -193,18 +186,13 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   }, [currentProfile]);
 
   const fetchBeverages = useCallback(async () => {
-    if (!currentProfile) {
-      setBeverages([]);
-      return;
-    }
-
+    if (!currentProfile) { setBeverages([]); return; }
     try {
       const { data, error } = await supabase
         .from('beverages')
         .select('*')
         .eq('profile_id', currentProfile.id)
         .order('created_at', { ascending: true });
-
       if (error) throw error;
       setBeverages((data || []).map(b => ({
         ...b,
@@ -217,18 +205,13 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   }, [currentProfile]);
 
   const fetchScannedBeverages = useCallback(async () => {
-    if (!currentProfile) {
-      setScannedBeverages([]);
-      return;
-    }
-
+    if (!currentProfile) { setScannedBeverages([]); return; }
     try {
       const { data, error } = await supabase
         .from('scanned_beverages')
         .select('*')
         .eq('profile_id', currentProfile.id)
         .order('created_at', { ascending: false });
-
       if (error) throw error;
       setScannedBeverages((data || []).map(b => ({
         ...b,
@@ -241,11 +224,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   }, [currentProfile]);
 
   const fetchChatMessages = useCallback(async () => {
-    if (!currentProfile) {
-      setChatMessages([]);
-      return;
-    }
-
+    if (!currentProfile) { setChatMessages([]); return; }
     try {
       const { data, error } = await supabase
         .from('chat_messages')
@@ -253,60 +232,34 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         .eq('profile_id', currentProfile.id)
         .order('created_at', { ascending: true })
         .limit(100);
-
       if (error) throw error;
-      setChatMessages((data || []).map(m => ({
-        ...m,
-        role: m.role as 'user' | 'assistant',
-      })));
+      setChatMessages((data || []).map(m => ({ ...m, role: m.role as 'user' | 'assistant' })));
     } catch (error) {
       console.error('Error fetching chat messages:', error);
     }
   }, [currentProfile]);
 
-  useEffect(() => {
-    fetchProfiles();
-  }, [fetchProfiles]);
+  useEffect(() => { fetchProfiles(); }, [fetchProfiles]);
 
   useEffect(() => {
     if (currentProfile) {
-      localStorage.setItem('blueBalance_currentProfile', currentProfile.id);
+      AsyncStorage.setItem('blueBalance_currentProfile', currentProfile.id);
       fetchWaterLogs();
       fetchBeverages();
       fetchScannedBeverages();
       fetchChatMessages();
-
-      document.documentElement.classList.remove('theme-ocean', 'theme-mint', 'theme-sunset', 'theme-graphite', 'theme-custom');
-      if (currentProfile.theme === 'custom' && currentProfile.custom_accent_color) {
-        document.documentElement.classList.add('theme-custom');
-
-        const hsl = currentProfile.custom_accent_color.match(/\d+/g);
-        if (hsl && hsl.length >= 3) {
-          document.documentElement.style.setProperty('--custom-accent-h', hsl[0]);
-          document.documentElement.style.setProperty('--custom-accent-s', hsl[1] + '%');
-          document.documentElement.style.setProperty('--custom-accent-l', hsl[2] + '%');
-        }
-      } else if (currentProfile.theme !== 'midnight') {
-        document.documentElement.classList.add(`theme-${currentProfile.theme}`);
-      }
     }
   }, [currentProfile, fetchWaterLogs, fetchBeverages, fetchScannedBeverages, fetchChatMessages]);
 
   const createProfile = async (profileData: Partial<Profile>): Promise<Profile | null> => {
     if (!user) return null;
-
     try {
-      
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session || !session.user) {
-        throw new Error('You must be signed in to create a profile.');
-      }
+      if (!session?.user) throw new Error('Not signed in');
 
-      const userId = session.user.id;
-      
       const insertData = {
-        user_id: userId,
-        username: (profileData.first_name + ' ' + (profileData.last_name || '')).trim() || 'User',
+        user_id: session.user.id,
+        username: ((profileData.first_name ?? '') + ' ' + (profileData.last_name ?? '')).trim() || 'User',
         first_name: profileData.first_name || null,
         last_name: profileData.last_name || null,
         age: profileData.age || null,
@@ -324,21 +277,11 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         quiet_hours_start: (profileData as any).quiet_hours_start || '22:00',
         quiet_hours_end: (profileData as any).quiet_hours_end || '07:00',
         sound_enabled: true,
-        vibration_enabled: true
+        vibration_enabled: true,
       };
 
-      console.log('Inserting profile for user:', userId);
-
-      const { data, error } = await supabase
-        .from('profiles')
-        .insert(insertData)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Supabase error creating profile:', error);
-        throw error;
-      }
+      const { data, error } = await supabase.from('profiles').insert(insertData).select().single();
+      if (error) throw error;
 
       const typedProfile = {
         ...data,
@@ -348,26 +291,20 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
       setProfiles(prev => [...prev, typedProfile]);
       return typedProfile;
-    } catch (error: any) {
-      console.error('Catch-all error in createProfile:', error);
+    } catch (error) {
+      console.error('Error creating profile:', error);
       return null;
     }
   };
 
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!currentProfile) return;
-
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .update(updates)
-        .eq('id', currentProfile.id);
-
+      const { error } = await supabase.from('profiles').update(updates).eq('id', currentProfile.id);
       if (error) throw error;
-
-      const updatedProfile = { ...currentProfile, ...updates } as Profile;
-      setCurrentProfile(updatedProfile);
-      setProfiles(prev => prev.map(p => p.id === currentProfile.id ? updatedProfile : p));
+      const updated = { ...currentProfile, ...updates } as Profile;
+      setCurrentProfile(updated);
+      setProfiles(prev => prev.map(p => p.id === currentProfile.id ? updated : p));
     } catch (error) {
       console.error('Error updating profile:', error);
     }
@@ -375,40 +312,30 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
   const deleteProfile = async (profileId: string) => {
     try {
-      const { error } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('id', profileId);
-
+      const { error } = await supabase.from('profiles').delete().eq('id', profileId);
       if (error) throw error;
-
       setProfiles(prev => prev.filter(p => p.id !== profileId));
       if (currentProfile?.id === profileId) {
-        const remaining = profiles.filter(p => p.id !== profileId);
-        setCurrentProfile(remaining[0] || null);
+        setCurrentProfile(profiles.filter(p => p.id !== profileId)[0] || null);
       }
     } catch (error) {
       console.error('Error deleting profile:', error);
     }
   };
 
-  const addWaterLog = async (amount: number, drinkType: string = 'Water', hydrationFactor: number = 1.0) => {
+  const addWaterLog = async (amount: number, drinkType = 'Water', hydrationFactor = 1.0) => {
     if (!currentProfile) return;
-
-    const effectiveAmount = amount * hydrationFactor;
-
     try {
       const { data, error } = await supabase
         .from('water_logs')
         .insert({
           profile_id: currentProfile.id,
-          amount: effectiveAmount,
+          amount: amount * hydrationFactor,
           drink_type: drinkType,
           logged_at: new Date().toISOString(),
         })
         .select()
         .single();
-
       if (error) throw error;
       setWaterLogs(prev => [{ ...data, amount: Number(data.amount) }, ...prev]);
     } catch (error) {
@@ -418,422 +345,193 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
   const deleteWaterLog = async (logId: string) => {
     try {
-      const { error } = await supabase
-        .from('water_logs')
-        .delete()
-        .eq('id', logId);
-
+      const { error } = await supabase.from('water_logs').delete().eq('id', logId);
       if (error) throw error;
-      setWaterLogs(prev => prev.filter(log => log.id !== logId));
+      setWaterLogs(prev => prev.filter(l => l.id !== logId));
     } catch (error) {
       console.error('Error deleting water log:', error);
     }
   };
 
   const undoLastLog = async () => {
-    const todayLogs = waterLogs.filter(log => {
-      const logDate = new Date(log.logged_at);
-      const today = new Date();
-      return logDate.toDateString() === today.toDateString();
-    });
-
-    if (todayLogs.length > 0) {
-      await deleteWaterLog(todayLogs[0].id);
-    }
+    const today = new Date();
+    const todayLogs = waterLogs.filter(l => new Date(l.logged_at).toDateString() === today.toDateString());
+    if (todayLogs.length > 0) await deleteWaterLog(todayLogs[0].id);
   };
 
   const getTodayIntake = useCallback(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return waterLogs
-      .filter(log => new Date(log.logged_at) >= today)
-      .reduce((sum, log) => sum + log.amount, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    return waterLogs.filter(l => new Date(l.logged_at) >= today).reduce((s, l) => s + l.amount, 0);
   }, [waterLogs]);
 
-  const getEffectiveIntake = useCallback(() => {
-    return getTodayIntake();
-  }, [getTodayIntake]);
+  const getEffectiveIntake = useCallback(() => getTodayIntake(), [getTodayIntake]);
 
   const getFilteredLogs = useCallback((filter: string, customRange?: { start: Date; end: Date }) => {
     const now = new Date();
     let startDate: Date;
-
     switch (filter) {
-      case 'hour':
-        startDate = new Date(now.getTime() - 60 * 60 * 1000);
-        break;
-      case 'day':
-        startDate = new Date(now);
-        startDate.setHours(0, 0, 0, 0);
-        break;
-      case 'week':
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case 'month':
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        break;
+      case 'hour': startDate = new Date(now.getTime() - 60 * 60 * 1000); break;
+      case 'day': startDate = new Date(now); startDate.setHours(0, 0, 0, 0); break;
+      case 'week': startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
+      case 'month': startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); break;
       case 'custom':
-        if (customRange) {
-          return waterLogs.filter(
-            log =>
-              new Date(log.logged_at) >= customRange.start &&
-              new Date(log.logged_at) <= customRange.end
-          );
-        }
+        if (customRange) return waterLogs.filter(l => new Date(l.logged_at) >= customRange.start && new Date(l.logged_at) <= customRange.end);
         return waterLogs;
-      default:
-        startDate = new Date(now);
-        startDate.setHours(0, 0, 0, 0);
+      default: startDate = new Date(now); startDate.setHours(0, 0, 0, 0);
     }
-
-    return waterLogs.filter(log => new Date(log.logged_at) >= startDate);
+    return waterLogs.filter(l => new Date(l.logged_at) >= startDate);
   }, [waterLogs]);
 
   const getExpectedIntake = useCallback(() => {
     if (!currentProfile) return 0;
-    
     const now = new Date();
-    const [wakeHour, wakeMin] = currentProfile.wake_time.split(':').map(Number);
-    const [sleepHour, sleepMin] = currentProfile.sleep_time.split(':').map(Number);
-
-    const wakeTime = new Date(now);
-    wakeTime.setHours(wakeHour, wakeMin, 0, 0);
-
-    const sleepTime = new Date(now);
-    sleepTime.setHours(sleepHour, sleepMin, 0, 0);
-
-    if (sleepTime <= wakeTime) {
-      sleepTime.setDate(sleepTime.getDate() + 1);
-    }
-
-    if (now < wakeTime) return 0;
-    if (now > sleepTime) return currentProfile.daily_goal;
-
-    const totalAwakeMs = sleepTime.getTime() - wakeTime.getTime();
-    const elapsedMs = Math.max(0, Math.min(now.getTime() - wakeTime.getTime(), totalAwakeMs));
-    const progress = elapsedMs / totalAwakeMs;
-
-    return currentProfile.daily_goal * progress;
+    const [wh, wm] = currentProfile.wake_time.split(':').map(Number);
+    const [sh, sm] = currentProfile.sleep_time.split(':').map(Number);
+    const wake = new Date(now); wake.setHours(wh, wm, 0, 0);
+    const sleep = new Date(now); sleep.setHours(sh, sm, 0, 0);
+    if (sleep <= wake) sleep.setDate(sleep.getDate() + 1);
+    if (now < wake) return 0;
+    if (now > sleep) return currentProfile.daily_goal;
+    const progress = (now.getTime() - wake.getTime()) / (sleep.getTime() - wake.getTime());
+    return currentProfile.daily_goal * Math.max(0, Math.min(progress, 1));
   }, [currentProfile]);
 
   const getExpectedRange = useCallback(() => {
     const expected = getExpectedIntake();
     const tolerance = currentProfile ? currentProfile.daily_goal * 0.1 : 0;
-    return {
-      min: Math.max(0, expected - tolerance),
-      max: expected + tolerance,
-    };
+    return { min: Math.max(0, expected - tolerance), max: expected + tolerance };
   }, [getExpectedIntake, currentProfile]);
 
-  const isOnTrack = useCallback(() => {
-    const range = getExpectedRange();
-    const intake = getTodayIntake();
-    return intake >= range.min;
-  }, [getExpectedRange, getTodayIntake]);
+  const isOnTrack = useCallback(() => getTodayIntake() >= getExpectedRange().min, [getTodayIntake, getExpectedRange]);
 
   const getStreak = useCallback(() => {
     if (!currentProfile) return 0;
-    
     let streak = 0;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
+    const today = new Date(); today.setHours(0, 0, 0, 0);
     for (let i = 0; i < 30; i++) {
-      const checkDate = new Date(today);
-      checkDate.setDate(checkDate.getDate() - i);
-      const nextDay = new Date(checkDate);
-      nextDay.setDate(nextDay.getDate() + 1);
-
-      const dayIntake = waterLogs
-        .filter(log =>
-          new Date(log.logged_at) >= checkDate && new Date(log.logged_at) < nextDay
-        )
-        .reduce((sum, log) => sum + log.amount, 0);
-
-      if (dayIntake >= currentProfile.daily_goal) {
-        streak++;
-      } else if (i === 0) {
-        continue;
-      } else {
-        break;
-      }
+      const check = new Date(today); check.setDate(check.getDate() - i);
+      const next = new Date(check); next.setDate(next.getDate() + 1);
+      const day = waterLogs.filter(l => new Date(l.logged_at) >= check && new Date(l.logged_at) < next).reduce((s, l) => s + l.amount, 0);
+      if (day >= currentProfile.daily_goal) { streak++; }
+      else if (i === 0) { continue; }
+      else { break; }
     }
-
     return streak;
   }, [currentProfile, waterLogs]);
 
   const getHydrationScore = useCallback((logs?: WaterLog[]) => {
     if (!currentProfile) return 0;
-    
-    const logsToUse = logs || getFilteredLogs('day');
-    const todayIntake = logsToUse.reduce((sum, log) => sum + log.amount, 0);
-
-    const goalCompletion = Math.min(todayIntake / currentProfile.daily_goal, 1) * 40;
-
-    const expectedIntake = getExpectedIntake();
-    const paceRatio = expectedIntake > 0 ? Math.min(todayIntake / expectedIntake, 1.2) : 1;
-    const paceScore = Math.min(paceRatio, 1) * 30;
-
-    const intervalMinutes = currentProfile.interval_length;
-    const [wakeHour, wakeMin] = currentProfile.wake_time.split(':').map(Number);
-    const [sleepHour, sleepMin] = currentProfile.sleep_time.split(':').map(Number);
-    
-    const wakeMinutes = wakeHour * 60 + wakeMin;
-    let sleepMinutes = sleepHour * 60 + sleepMin;
-    if (sleepMinutes <= wakeMinutes) sleepMinutes += 24 * 60;
-    
-    const totalMinutes = sleepMinutes - wakeMinutes;
-    const expectedIntervals = Math.ceil(totalMinutes / intervalMinutes);
-    
+    const use = logs || getFilteredLogs('day');
+    const intake = use.reduce((s, l) => s + l.amount, 0);
+    const goal = Math.min(intake / currentProfile.daily_goal, 1) * 40;
+    const exp = getExpectedIntake();
+    const pace = Math.min(exp > 0 ? Math.min(intake / exp, 1.2) : 1, 1) * 30;
+    const [wh, wm] = currentProfile.wake_time.split(':').map(Number);
+    const [sh, sm] = currentProfile.sleep_time.split(':').map(Number);
+    const wakeMin = wh * 60 + wm;
+    let sleepMin = sh * 60 + sm; if (sleepMin <= wakeMin) sleepMin += 1440;
+    const ivMin = currentProfile.interval_length;
+    const ivCount = Math.ceil((sleepMin - wakeMin) / ivMin);
     const now = new Date();
-    const currentMinutes = now.getHours() * 60 + now.getMinutes();
-    const elapsedMinutes = Math.max(0, currentMinutes - wakeMinutes);
-    const currentInterval = Math.floor(elapsedMinutes / intervalMinutes);
-    
-    let intervalsMet = 0;
-    for (let i = 0; i <= Math.min(currentInterval, expectedIntervals - 1); i++) {
-      const intervalStart = new Date(now);
-      intervalStart.setHours(0, 0, 0, 0);
-      intervalStart.setMinutes(wakeMinutes + i * intervalMinutes);
-      
-      const intervalEnd = new Date(intervalStart);
-      intervalEnd.setMinutes(intervalStart.getMinutes() + intervalMinutes);
-      
-      const intervalLogs = logsToUse.filter(log => {
-        const logTime = new Date(log.logged_at);
-        return logTime >= intervalStart && logTime < intervalEnd;
-      });
-      
-      if (intervalLogs.length > 0) intervalsMet++;
+    const curMin = now.getHours() * 60 + now.getMinutes();
+    const elapsed = Math.max(0, curMin - wakeMin);
+    const curIv = Math.floor(elapsed / ivMin);
+    let met = 0;
+    for (let i = 0; i <= Math.min(curIv, ivCount - 1); i++) {
+      const s = new Date(now); s.setHours(0, 0, 0, 0); s.setMinutes(wakeMin + i * ivMin);
+      const e = new Date(s); e.setMinutes(s.getMinutes() + ivMin);
+      if (use.some(l => { const lt = new Date(l.logged_at); return lt >= s && lt < e; })) met++;
     }
-    
-    const completedIntervals = Math.max(currentInterval + 1, 1);
-    const consistencyScore = (intervalsMet / completedIntervals) * 30;
-    
-    return Math.round(goalCompletion + paceScore + consistencyScore);
+    const consistency = (met / Math.max(curIv + 1, 1)) * 30;
+    return Math.round(goal + pace + consistency);
   }, [currentProfile, getFilteredLogs, getExpectedIntake]);
 
   const getCurrentIntervalProgress = useCallback(() => {
-    if (!currentProfile) {
-      return { current: 0, target: 0, timeRemaining: 0, intervalIndex: 0, totalIntervals: 0 };
-    }
-
+    if (!currentProfile) return { current: 0, target: 0, timeRemaining: 0, intervalIndex: 0, totalIntervals: 0 };
     const now = new Date();
-    const [wakeHour, wakeMin] = currentProfile.wake_time.split(':').map(Number);
-    const [sleepHour, sleepMin] = currentProfile.sleep_time.split(':').map(Number);
-
-    const wakeTime = new Date(now);
-    wakeTime.setHours(wakeHour, wakeMin, 0, 0);
-
-    let sleepTime = new Date(now);
-    sleepTime.setHours(sleepHour, sleepMin, 0, 0);
-    if (sleepTime <= wakeTime) {
-      sleepTime.setDate(sleepTime.getDate() + 1);
-    }
-
-    const totalAwakeMs = sleepTime.getTime() - wakeTime.getTime();
-    const intervalMs = currentProfile.interval_length * 60 * 1000;
-    const totalIntervals = Math.ceil(totalAwakeMs / intervalMs);
-    
-    const elapsedMs = Math.max(0, now.getTime() - wakeTime.getTime());
-    const intervalIndex = Math.min(Math.floor(elapsedMs / intervalMs), totalIntervals - 1);
-    
-    const intervalStart = new Date(wakeTime.getTime() + intervalIndex * intervalMs);
-    const intervalEnd = new Date(Math.min(intervalStart.getTime() + intervalMs, sleepTime.getTime()));
-    
-    const targetPerInterval = currentProfile.daily_goal / totalIntervals;
-    
-    const intervalLogs = waterLogs.filter(log => {
-      const logTime = new Date(log.logged_at);
-      return logTime >= intervalStart && logTime < intervalEnd;
-    });
-    
-    const currentIntake = intervalLogs.reduce((sum, log) => sum + log.amount, 0);
-    const timeRemaining = Math.max(0, intervalEnd.getTime() - now.getTime());
-
-    return {
-      current: currentIntake,
-      target: targetPerInterval,
-      timeRemaining,
-      intervalIndex,
-      totalIntervals,
-    };
+    const [wh, wm] = currentProfile.wake_time.split(':').map(Number);
+    const [sh, sm] = currentProfile.sleep_time.split(':').map(Number);
+    const wake = new Date(now); wake.setHours(wh, wm, 0, 0);
+    const sleep = new Date(now); sleep.setHours(sh, sm, 0, 0);
+    if (sleep <= wake) sleep.setDate(sleep.getDate() + 1);
+    const ivMs = currentProfile.interval_length * 60 * 1000;
+    const total = Math.ceil((sleep.getTime() - wake.getTime()) / ivMs);
+    const elapsed = Math.max(0, now.getTime() - wake.getTime());
+    const idx = Math.min(Math.floor(elapsed / ivMs), total - 1);
+    const ivStart = new Date(wake.getTime() + idx * ivMs);
+    const ivEnd = new Date(Math.min(ivStart.getTime() + ivMs, sleep.getTime()));
+    const target = currentProfile.daily_goal / total;
+    const logs = waterLogs.filter(l => { const t = new Date(l.logged_at); return t >= ivStart && t < ivEnd; });
+    return { current: logs.reduce((s, l) => s + l.amount, 0), target, timeRemaining: Math.max(0, ivEnd.getTime() - now.getTime()), intervalIndex: idx, totalIntervals: total };
   }, [currentProfile, waterLogs]);
 
-  const addBeverage = async (beverageData: Partial<Beverage>): Promise<Beverage | null> => {
+  const addBeverage = async (d: Partial<Beverage>): Promise<Beverage | null> => {
     if (!currentProfile) return null;
-
     try {
-      const { data, error } = await supabase
-        .from('beverages')
-        .insert({
-          profile_id: currentProfile.id,
-          name: beverageData.name || 'Custom Beverage',
-          serving_size: beverageData.serving_size || 8,
-          hydration_factor: beverageData.hydration_factor || 1.0,
-          icon: beverageData.icon || 'droplet',
-          is_default: false,
-        })
-        .select()
-        .single();
-
+      const { data, error } = await supabase.from('beverages').insert({ profile_id: currentProfile.id, name: d.name || 'Custom', serving_size: d.serving_size || 8, hydration_factor: d.hydration_factor || 1.0, icon: d.icon || 'droplet', is_default: false }).select().single();
       if (error) throw error;
-      
-      const typedBeverage = {
-        ...data,
-        serving_size: Number(data.serving_size),
-        hydration_factor: Number(data.hydration_factor),
-      } as Beverage;
-      
-      setBeverages(prev => [...prev, typedBeverage]);
-      return typedBeverage;
-    } catch (error) {
-      console.error('Error adding beverage:', error);
-      return null;
-    }
+      const b = { ...data, serving_size: Number(data.serving_size), hydration_factor: Number(data.hydration_factor) } as Beverage;
+      setBeverages(prev => [...prev, b]);
+      return b;
+    } catch (e) { console.error(e); return null; }
   };
 
   const deleteBeverage = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('beverages')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.from('beverages').delete().eq('id', id);
       if (error) throw error;
       setBeverages(prev => prev.filter(b => b.id !== id));
-    } catch (error) {
-      console.error('Error deleting beverage:', error);
-    }
+    } catch (e) { console.error(e); }
   };
 
-  const addScannedBeverage = async (beverageData: Partial<ScannedBeverage>): Promise<ScannedBeverage | null> => {
+  const addScannedBeverage = async (d: Partial<ScannedBeverage>): Promise<ScannedBeverage | null> => {
     if (!currentProfile) return null;
-
     try {
-      const { data, error } = await supabase
-        .from('scanned_beverages')
-        .insert({
-          profile_id: currentProfile.id,
-          barcode: beverageData.barcode || '',
-          name: beverageData.name || 'Scanned Beverage',
-          serving_size: beverageData.serving_size || 8,
-          hydration_factor: beverageData.hydration_factor || 1.0,
-        })
-        .select()
-        .single();
-
+      const { data, error } = await supabase.from('scanned_beverages').insert({ profile_id: currentProfile.id, barcode: d.barcode || '', name: d.name || 'Scanned', serving_size: d.serving_size || 8, hydration_factor: d.hydration_factor || 1.0 }).select().single();
       if (error) throw error;
-      
-      const typedBeverage = {
-        ...data,
-        serving_size: Number(data.serving_size),
-        hydration_factor: Number(data.hydration_factor),
-      } as ScannedBeverage;
-      
-      setScannedBeverages(prev => [typedBeverage, ...prev]);
-      return typedBeverage;
-    } catch (error) {
-      console.error('Error adding scanned beverage:', error);
-      return null;
-    }
+      const b = { ...data, serving_size: Number(data.serving_size), hydration_factor: Number(data.hydration_factor) } as ScannedBeverage;
+      setScannedBeverages(prev => [b, ...prev]);
+      return b;
+    } catch (e) { console.error(e); return null; }
   };
 
   const deleteScannedBeverage = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('scanned_beverages')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.from('scanned_beverages').delete().eq('id', id);
       if (error) throw error;
       setScannedBeverages(prev => prev.filter(b => b.id !== id));
-    } catch (error) {
-      console.error('Error deleting scanned beverage:', error);
-    }
+    } catch (e) { console.error(e); }
   };
 
   const addChatMessage = async (role: 'user' | 'assistant', content: string): Promise<ChatMessage | null> => {
     if (!currentProfile) return null;
-
     try {
-      const { data, error } = await supabase
-        .from('chat_messages')
-        .insert({
-          profile_id: currentProfile.id,
-          role,
-          content,
-        })
-        .select()
-        .single();
-
+      const { data, error } = await supabase.from('chat_messages').insert({ profile_id: currentProfile.id, role, content }).select().single();
       if (error) throw error;
-      
-      const typedMessage = {
-        ...data,
-        role: data.role as 'user' | 'assistant',
-      } as ChatMessage;
-      
-      setChatMessages(prev => [...prev, typedMessage]);
-      return typedMessage;
-    } catch (error) {
-      console.error('Error adding chat message:', error);
-      return null;
-    }
+      const m = { ...data, role: data.role as 'user' | 'assistant' } as ChatMessage;
+      setChatMessages(prev => [...prev, m]);
+      return m;
+    } catch (e) { console.error(e); return null; }
   };
 
   const clearChatHistory = async () => {
     if (!currentProfile) return;
-
     try {
-      const { error } = await supabase
-        .from('chat_messages')
-        .delete()
-        .eq('profile_id', currentProfile.id);
-
+      const { error } = await supabase.from('chat_messages').delete().eq('profile_id', currentProfile.id);
       if (error) throw error;
       setChatMessages([]);
-    } catch (error) {
-      console.error('Error clearing chat history:', error);
-    }
+    } catch (e) { console.error(e); }
   };
 
   return (
-    <ProfileContext.Provider
-      value={{
-        profiles,
-        currentProfile,
-        waterLogs,
-        beverages,
-        scannedBeverages,
-        chatMessages,
-        loading,
-        setCurrentProfile,
-        createProfile,
-        updateProfile,
-        deleteProfile,
-        fetchProfiles,
-        addWaterLog,
-        deleteWaterLog,
-        undoLastLog,
-        getTodayIntake,
-        getEffectiveIntake,
-        getFilteredLogs,
-        getExpectedIntake,
-        getExpectedRange,
-        isOnTrack,
-        getStreak,
-        getHydrationScore,
-        getCurrentIntervalProgress,
-        addBeverage,
-        deleteBeverage,
-        addScannedBeverage,
-        deleteScannedBeverage,
-        addChatMessage,
-        clearChatHistory,
-        convertAmount,
-      }}
-    >
+    <ProfileContext.Provider value={{
+      profiles, currentProfile, waterLogs, beverages, scannedBeverages, chatMessages, loading,
+      setCurrentProfile, createProfile, updateProfile, deleteProfile, fetchProfiles,
+      addWaterLog, deleteWaterLog, undoLastLog, getTodayIntake, getEffectiveIntake,
+      getFilteredLogs, getExpectedIntake, getExpectedRange, isOnTrack, getStreak,
+      getHydrationScore, getCurrentIntervalProgress, addBeverage, deleteBeverage,
+      addScannedBeverage, deleteScannedBeverage, addChatMessage, clearChatHistory, convertAmount,
+    }}>
       {children}
     </ProfileContext.Provider>
   );
@@ -841,8 +539,6 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
 export function useProfile() {
   const context = useContext(ProfileContext);
-  if (context === undefined) {
-    throw new Error('useProfile must be used within a ProfileProvider');
-  }
+  if (!context) throw new Error('useProfile must be used within ProfileProvider');
   return context;
 }

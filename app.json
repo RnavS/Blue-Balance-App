@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "Blue Balance",
+    "slug": "blue-balance",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f0f1a"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.bluebalance.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f0f1a"
+      },
+      "package": "com.bluebalance.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Blue Balance to access your camera for barcode scanning."
+        }
+      ]
+    ],
+    "scheme": "bluebalance",
+    "extra": {
+      "supabaseUrl": "https://nletlerswxuyxihqelrq.supabase.co",
+      "supabaseKey": "sb_publishable_UqxzZ2-Pa8iHDbNo8bsnMQ_CptoPf6t"
+    },
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

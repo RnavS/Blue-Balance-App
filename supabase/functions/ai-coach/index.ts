@@ -93,7 +93,6 @@ ${context ?? ""}`;
       data?.choices?.[0]?.message?.content ??
       "I'm here to help with your hydration goals!";
 
-    // Parse action JSON from response (optional)
     let action: any = null;
     const actionMatch = responseText.match(/\{"action":\s*\{[\s\S]*?\}\}/);
     if (actionMatch) {

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
 
 export interface PremiumState {
@@ -19,7 +20,6 @@ const PremiumContext = createContext<PremiumContextType | undefined>(undefined);
 
 export function PremiumProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  
   const [state, setState] = useState<PremiumState>({
     isPremium: false,
     bankConnected: false,
@@ -33,56 +33,44 @@ export function PremiumProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       return;
     }
-
-    const stored = localStorage.getItem(`blueBalance_premium_${user.id}`);
-    if (stored) {
-      try {
-        setState(JSON.parse(stored));
-      } catch (e) {
-        console.error("Failed to load premium state:", e);
+    const key = `blueBalance_premium_${user.id}`;
+    AsyncStorage.getItem(key).then(stored => {
+      if (stored) {
+        try { setState(JSON.parse(stored)); } catch (_) {}
       }
-    }
-    setLoading(false);
+      setLoading(false);
+    });
   }, [user]);
 
-  const saveState = (newState: PremiumState) => {
+  const saveState = async (newState: PremiumState) => {
     setState(newState);
     if (user) {
-      localStorage.setItem(`blueBalance_premium_${user.id}`, JSON.stringify(newState));
+      await AsyncStorage.setItem(`blueBalance_premium_${user.id}`, JSON.stringify(newState));
     }
   };
 
   const upgradeToPremium = async () => {
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    saveState({ ...state, isPremium: true });
+    await new Promise(r => setTimeout(r, 800));
+    await saveState({ ...state, isPremium: true });
   };
 
   const cancelPremium = async () => {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    saveState({ ...state, isPremium: false });
+    await new Promise(r => setTimeout(r, 500));
+    await saveState({ ...state, isPremium: false });
   };
 
   const connectBank = async (last4: string) => {
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    saveState({ ...state, bankConnected: true, bankLast4: last4 });
+    await new Promise(r => setTimeout(r, 1500));
+    await saveState({ ...state, bankConnected: true, bankLast4: last4 });
   };
 
   const disconnectBank = async () => {
-    await new Promise((resolve) => setTimeout(resolve, 500));
-    saveState({ ...state, bankConnected: false, bankLast4: null });
+    await new Promise(r => setTimeout(r, 500));
+    await saveState({ ...state, bankConnected: false, bankLast4: null });
   };
 
   return (
-    <PremiumContext.Provider
-      value={{
-        ...state,
-        loading,
-        upgradeToPremium,
-        cancelPremium,
-        connectBank,
-        disconnectBank,
-      }}
-    >
+    <PremiumContext.Provider value={{ ...state, loading, upgradeToPremium, cancelPremium, connectBank, disconnectBank }}>
       {children}
     </PremiumContext.Provider>
   );
@@ -90,8 +78,6 @@ export function PremiumProvider({ children }: { children: ReactNode }) {
 
 export function usePremium() {
   const context = useContext(PremiumContext);
-  if (context === undefined) {
-    throw new Error('usePremium must be used within a PremiumProvider');
-  }
+  if (context === undefined) throw new Error('usePremium must be used within PremiumProvider');
   return context;
 }
