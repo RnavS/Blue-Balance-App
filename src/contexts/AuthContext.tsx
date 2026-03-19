@@ -15,6 +15,27 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const toError = (value: unknown): Error => {
+  if (value instanceof Error) return value;
+  if (typeof value === 'string') return new Error(value);
+  return new Error('Unexpected auth error');
+};
+
+const withTimeout = async <T,>(promise: Promise<T>, ms: number = 20000): Promise<T> => {
+  return await new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Request timed out. Please check your SMTP setup and try again.')), ms);
+    promise
+      .then((result) => {
+        clearTimeout(timer);
+        resolve(result);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -41,42 +62,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signInWithGoogle = async () => {
-    const redirectUrl = `${window.location.origin}/`;
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: redirectUrl,
-      },
-    });
-    return { error: error as Error | null };
+    try {
+      const redirectUrl = `${window.location.origin}/`;
+      const { error } = await withTimeout(
+        supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: redirectUrl,
+          },
+        }),
+      );
+      return { error: error as Error | null };
+    } catch (error) {
+      return { error: toError(error) };
+    }
   };
 
   const signInWithEmail = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { error: error as Error | null };
+    try {
+      const { error } = await withTimeout(
+        supabase.auth.signInWithPassword({
+          email,
+          password,
+        }),
+      );
+      return { error: error as Error | null };
+    } catch (error) {
+      return { error: toError(error) };
+    }
   };
 
   const signUpWithEmail = async (email: string, password: string) => {
-    const redirectUrl = `${window.location.origin}/`;
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-      },
-    });
-    return { error: error as Error | null };
+    try {
+      const redirectUrl = `${window.location.origin}/`;
+      const { error } = await withTimeout(
+        supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: redirectUrl,
+          },
+        }),
+      );
+      return { error: error as Error | null };
+    } catch (error) {
+      return { error: toError(error) };
+    }
   };
 
   const resetPassword = async (email: string) => {
-    const redirectUrl = `${window.location.origin}/`;
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: redirectUrl,
-    });
-    return { error: error as Error | null };
+    try {
+      const redirectUrl = `${window.location.origin}/`;
+      const { error } = await withTimeout(
+        supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: redirectUrl,
+        }),
+      );
+      return { error: error as Error | null };
+    } catch (error) {
+      return { error: toError(error) };
+    }
   };
 
   const signOut = async () => {

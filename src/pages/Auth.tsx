@@ -44,59 +44,71 @@ export function Auth() {
 
   const handleGoogleSignIn = async () => {
     setLoading(true);
-    const { error } = await signInWithGoogle();
-    if (error) {
-      toast({
-        title: 'Sign in failed',
-        description: error.message,
-        variant: 'destructive',
-      });
+    try {
+      const { error } = await signInWithGoogle();
+      if (error) {
+        toast({
+          title: 'Sign in failed',
+          description: error.message,
+          variant: 'destructive',
+        });
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleEmailSignIn = async () => {
     if (!validateForm()) return;
     
     setLoading(true);
-    const { error } = await signInWithEmail(email, password);
-    if (error) {
-      let message = error.message;
-      if (error.message.includes('Invalid login credentials')) {
-        message = 'Invalid email or password. Please try again.';
+    try {
+      const { error } = await signInWithEmail(email, password);
+      if (error) {
+        let message = error.message;
+        if (error.message.includes('Invalid login credentials')) {
+          message = 'Invalid email or password. Please try again.';
+        }
+        toast({
+          title: 'Sign in failed',
+          description: message,
+          variant: 'destructive',
+        });
       }
-      toast({
-        title: 'Sign in failed',
-        description: message,
-        variant: 'destructive',
-      });
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleEmailSignUp = async () => {
     if (!validateForm()) return;
     
     setLoading(true);
-    const { error } = await signUpWithEmail(email, password);
-    if (error) {
-      let message = error.message;
-      if (error.message.includes('already registered')) {
-        message = 'This email is already registered. Please sign in instead.';
+    try {
+      const { error } = await signUpWithEmail(email, password);
+      if (error) {
+        let message = error.message;
+        if (error.message.includes('already registered')) {
+          message = 'This email is already registered. Please sign in instead.';
+        }
+        if (error.message.toLowerCase().includes('rate limit')) {
+          message = 'Too many email attempts. Please wait a few minutes and try again.';
+        }
+        toast({
+          title: 'Sign up failed',
+          description: message,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Account created!',
+          description: 'You can now sign in with your credentials.',
+        });
+        setMode('signin');
       }
-      toast({
-        title: 'Sign up failed',
-        description: message,
-        variant: 'destructive',
-      });
-    } else {
-      toast({
-        title: 'Account created!',
-        description: 'You can now sign in with your credentials.',
-      });
-      setMode('signin');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handlePasswordReset = async () => {
@@ -112,21 +124,24 @@ export function Auth() {
     }
     
     setLoading(true);
-    const { error } = await resetPassword(email);
-    if (error) {
-      toast({
-        title: 'Reset failed',
-        description: error.message,
-        variant: 'destructive',
-      });
-    } else {
-      toast({
-        title: 'Check your email',
-        description: 'We sent you a password reset link.',
-      });
-      setMode('signin');
+    try {
+      const { error } = await resetPassword(email);
+      if (error) {
+        toast({
+          title: 'Reset failed',
+          description: error.message,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Check your email',
+          description: 'We sent you a password reset link.',
+        });
+        setMode('signin');
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

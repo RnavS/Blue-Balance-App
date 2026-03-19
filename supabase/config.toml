@@ -1,4 +1,4 @@
-project_id = "risngyykrjzdvyznyfxw"
+project_id = "emkzmmlheaalikdaewew"
 
 [functions.generate-tip]
 verify_jwt = false
@@ -7,4 +7,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.estimate-beverage]
+verify_jwt = false
+
+[functions.barcode-lookup]
 verify_jwt = false

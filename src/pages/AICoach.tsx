@@ -65,6 +65,38 @@ const renderTextWithLinks = (text: string) => {
   return parts.length > 0 ? parts : text;
 };
 
+const getFriendlyAICoachError = async (error: unknown): Promise<string> => {
+  const rawMessage = error instanceof Error ? error.message : String(error ?? '');
+  const functionsError = error as { context?: { json?: () => Promise<any> } };
+
+  if (functionsError?.context?.json) {
+    try {
+      const payload = await functionsError.context.json();
+      if (typeof payload?.response === 'string' && payload.response.trim()) {
+        return sanitizeResponse(payload.response);
+      }
+
+      if (typeof payload?.error === 'string') {
+        const backendError = payload.error.toLowerCase();
+        if (backendError.includes('is not configured')) {
+          return "AI coach is not configured yet. Add your AI provider key in Supabase secrets and deploy the ai-coach function.";
+        }
+        if (backendError.includes('http_401') || backendError.includes('http_403')) {
+          return "AI key is rejected by the provider. Update the API key secret and redeploy the ai-coach function.";
+        }
+      }
+    } catch {
+      // Ignore JSON parsing errors and fall through to default message.
+    }
+  }
+
+  if (rawMessage.toLowerCase().includes('failed to fetch')) {
+    return "I couldn't reach the AI service. Check your internet and confirm the ai-coach function is deployed.";
+  }
+
+  return "I couldn't get a response from AI Coach right now. Please try again in a moment.";
+};
+
 export function AICoach() {
   const { 
     currentProfile, 
@@ -147,7 +179,11 @@ ${waterLogs.slice(0, 5).map(log => `- ${log.amount}${unitPreference} of ${log.dr
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        const friendlyError = await getFriendlyAICoachError(error);
+        await addChatMessage('assistant', friendlyError);
+        return;
+      }
 
       let response = data?.response || "I'm here to help you stay hydrated! How can I assist you today?";
       
@@ -162,10 +198,11 @@ ${waterLogs.slice(0, 5).map(log => `- ${log.amount}${unitPreference} of ${log.dr
       await addChatMessage('assistant', response);
     } catch (error) {
       console.error('AI Coach error:', error);
-      await addChatMessage('assistant', "I'm having trouble connecting right now. Please try again in a moment.");
+      const friendlyError = await getFriendlyAICoachError(error);
+      await addChatMessage('assistant', friendlyError);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleAIAction = async (action: { type: string; params: any }) => {

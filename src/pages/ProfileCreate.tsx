@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { supabase } from '@/integrations/supabase/client';
 
 const activityLevels = [
   { id: 'light', label: 'Light', description: 'Mostly sitting, minimal exercise' },
@@ -56,6 +57,7 @@ export function ProfileCreate() {
     activity_level: 'moderate' as 'light' | 'moderate' | 'high',
     daily_goal: 0,
     goal_mode: 'auto' as 'auto' | 'manual',
+    initial_intake: '',
     interval_length: 60,
     reminders_enabled: true,
     reminder_interval: 30,
@@ -143,6 +145,44 @@ export function ProfileCreate() {
     return Math.round(baselineMl);
   };
 
+  const getActiveGoal = () => {
+    if (formData.goal_mode === 'manual' && formData.daily_goal > 0) {
+      return formData.daily_goal;
+    }
+    return calculateGoal();
+  };
+
+  const getExpectedByNowForGoal = (goal: number) => {
+    const now = new Date();
+    const [wakeHour, wakeMin] = formData.wake_time.split(':').map(Number);
+    const [sleepHour, sleepMin] = formData.sleep_time.split(':').map(Number);
+
+    const wakeTime = new Date(now);
+    wakeTime.setHours(wakeHour, wakeMin, 0, 0);
+
+    let sleepTime = new Date(now);
+    sleepTime.setHours(sleepHour, sleepMin, 0, 0);
+
+    if (sleepTime <= wakeTime) {
+      // Overnight schedule (example: wake 22:00, sleep 06:00)
+      if (now < wakeTime) {
+        wakeTime.setDate(wakeTime.getDate() - 1);
+      }
+      sleepTime = new Date(wakeTime);
+      sleepTime.setHours(sleepHour, sleepMin, 0, 0);
+      if (sleepTime <= wakeTime) {
+        sleepTime.setDate(sleepTime.getDate() + 1);
+      }
+    }
+
+    if (now <= wakeTime) return 0;
+    if (now >= sleepTime) return goal;
+
+    const elapsedMs = now.getTime() - wakeTime.getTime();
+    const totalMs = sleepTime.getTime() - wakeTime.getTime();
+    return goal * (elapsedMs / totalMs);
+  };
+
   const handleNext = () => {
     if (step === 1 && !formData.first_name.trim()) {
       toast({
@@ -181,6 +221,8 @@ export function ProfileCreate() {
     setLoading(true);
     
     const username = `${formData.first_name} ${formData.last_name}`.trim();
+    const resolvedGoal = getActiveGoal();
+    const initialIntake = Math.max(0, parseFloat(formData.initial_intake) || 0);
     
     const profile = await createProfile({
       username,
@@ -193,7 +235,7 @@ export function ProfileCreate() {
       wake_time: formData.wake_time,
       sleep_time: formData.sleep_time,
       activity_level: formData.activity_level,
-      daily_goal: formData.daily_goal || calculateGoal(),
+      daily_goal: resolvedGoal,
       interval_length: formData.interval_length,
       reminders_enabled: formData.reminders_enabled,
       reminder_interval: formData.reminder_interval,
@@ -203,6 +245,21 @@ export function ProfileCreate() {
     });
 
     if (profile) {
+      if (initialIntake > 0) {
+        const { error: initialLogError } = await supabase
+          .from('water_logs')
+          .insert({
+            profile_id: profile.id,
+            amount: initialIntake,
+            drink_type: 'Initial Intake',
+            logged_at: new Date().toISOString(),
+          });
+
+        if (initialLogError) {
+          console.error('Error saving initial intake log:', initialLogError);
+        }
+      }
+
       setCurrentProfile(profile);
       
       // Add selected beverages to the user's library
@@ -220,7 +277,9 @@ export function ProfileCreate() {
       
       toast({
         title: 'Profile created!',
-        description: `Welcome, ${formData.first_name}!`,
+        description: initialIntake > 0
+          ? `Welcome, ${formData.first_name}! Added ${initialIntake.toFixed(1)} ${formData.unit_preference} to today's progress.`
+          : `Welcome, ${formData.first_name}!`,
       });
       navigate('/app');
     } else {
@@ -235,6 +294,12 @@ export function ProfileCreate() {
   };
 
   const totalSteps = 7;
+  const activeGoal = getActiveGoal();
+  const currentTimeTarget = getExpectedByNowForGoal(activeGoal);
+  const initialIntake = Math.max(0, parseFloat(formData.initial_intake) || 0);
+  const drinkNowToCatchUp = Math.max(0, currentTimeTarget - initialIntake);
+  const remainingForToday = Math.max(0, activeGoal - initialIntake);
+  const currentTimeLabel = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
   return (
     <TooltipProvider>
@@ -547,7 +612,7 @@ export function ProfileCreate() {
                 <div className="glass-card p-4 text-center">
                   <p className="text-sm text-muted-foreground mb-2">Based on National Academies guidelines</p>
                   <div className="text-4xl font-bold text-foreground mb-1">
-                    {calculateGoal()} {formData.unit_preference}
+                    {activeGoal} {formData.unit_preference}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {formData.gender === 'male' ? '3.7 L/day baseline' : formData.gender === 'female' ? '2.7 L/day baseline' : 'Average baseline'} 
@@ -566,6 +631,37 @@ export function ProfileCreate() {
                   />
                 </div>
               )}
+
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">
+                  How much have you already drank today? ({formData.unit_preference})
+                </label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  placeholder={formData.unit_preference === 'oz' ? '20' : '600'}
+                  value={formData.initial_intake}
+                  onChange={(e) => updateForm({ initial_intake: e.target.value })}
+                  className="bg-card/60 border-white/10"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  We will add this amount to today as your starting progress.
+                </p>
+              </div>
+
+              <div className="glass-card p-4 space-y-2">
+                <p className="text-sm text-foreground">
+                  Based on your schedule, by {currentTimeLabel} your target is about{' '}
+                  <span className="font-semibold">{currentTimeTarget.toFixed(1)} {formData.unit_preference}</span>.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Drink now to catch up: {drinkNowToCatchUp.toFixed(1)} {formData.unit_preference}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Remaining for the full day: {remainingForToday.toFixed(1)} {formData.unit_preference}
+                </p>
+              </div>
             </motion.div>
           )}
 
