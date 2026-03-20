@@ -1,144 +1,184 @@
-import { View, Text, Pressable, StyleSheet, Image } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Spacing, Radius, FontSize } from '@/theme/colors';
+import ScreenContainer from '@/components/ui/ScreenContainer';
+import { useAppTheme } from '@/theme/useAppTheme';
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const theme = useAppTheme();
+  const styles = createStyles(theme);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.glow1} />
-      <View style={styles.glow2} />
+    <ScreenContainer>
+      <View style={styles.container}>
+        <View style={styles.heroBackdrop} />
+        <View style={styles.heroBlob} />
 
-      <View style={styles.content}>
-        <View style={styles.logoBox}>
-          <Ionicons name="water" size={48} color={Colors.primary} />
-        </View>
-
-        <Text style={styles.title}>Blue Balance</Text>
-
-        <Text style={styles.subtitle}>
-          Smart hydration tracking with AI-powered coaching
-        </Text>
-
-        <View style={styles.features}>
-          <View style={styles.featureItem}>
-            <Ionicons name="sparkles" size={16} color={Colors.primary} />
-            <Text style={styles.featureText}>AI Tips</Text>
+        <View style={styles.content}>
+          <View style={styles.brandPill}>
+            <Ionicons name="sparkles-outline" size={14} color={theme.colors.primary} />
+            <Text style={styles.brandPillText}>Hydration, reimagined</Text>
           </View>
-          <View style={styles.dot} />
-          <View style={styles.featureItem}>
-            <Ionicons name="trending-up" size={16} color={Colors.primary} />
-            <Text style={styles.featureText}>Progress Tracking</Text>
-          </View>
-        </View>
 
-        <Pressable style={styles.button} onPress={() => router.push('/auth')}>
-          <Text style={styles.buttonText}>Get Started</Text>
-        </Pressable>
+          <View style={styles.logoBox}>
+            <Ionicons name="water" size={42} color={theme.colors.onPrimary} />
+          </View>
+
+          <Text style={styles.title}>Blue Balance</Text>
+          <Text style={styles.subtitle}>
+            Build better hydration habits with simple tracking, barcode scan, and smart AI coaching.
+          </Text>
+
+          <View style={styles.features}>
+            <View style={styles.featureItem}>
+              <View style={styles.featureIconWrap}>
+                <Ionicons name="analytics-outline" size={16} color={theme.colors.primary} />
+              </View>
+              <Text style={styles.featureText}>Clear daily progress and streaks</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <View style={styles.featureIconWrap}>
+                <Ionicons name="scan-outline" size={16} color={theme.colors.primary} />
+              </View>
+              <Text style={styles.featureText}>Fast barcode + manual beverage logging</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <View style={styles.featureIconWrap}>
+                <Ionicons name="chatbubble-ellipses-outline" size={16} color={theme.colors.primary} />
+              </View>
+              <Text style={styles.featureText}>AI coach with personalized advice</Text>
+            </View>
+          </View>
+
+          <Pressable style={styles.primaryBtn} onPress={() => router.push('/auth')}>
+            <Text style={styles.primaryBtnText}>Start Tracking</Text>
+            <Ionicons name="arrow-forward" size={16} color={theme.colors.onPrimary} />
+          </Pressable>
+
+          <Text style={styles.footnote}>No setup friction. Create an account and start in under a minute.</Text>
+        </View>
       </View>
-    </View>
+    </ScreenContainer>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: Colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  glow1: {
-    position: 'absolute',
-    top: '25%',
-    width: 320,
-    height: 320,
-    borderRadius: 160,
-    backgroundColor: Colors.primaryGlow,
-    alignSelf: 'center',
-    opacity: 0.4,
-  },
-  glow2: {
-    position: 'absolute',
-    bottom: '20%',
-    left: '10%',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: 'rgba(6,182,212,0.1)',
-    opacity: 0.5,
-  },
-  content: {
-    alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
-    zIndex: 10,
-  },
-  logoBox: {
-    width: 96,
-    height: 96,
-    borderRadius: Radius.xl,
-    backgroundColor: Colors.primaryLight,
-    borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.lg,
-  },
-  title: {
-    fontSize: FontSize.xxxl,
-    fontWeight: '700',
-    color: Colors.foreground,
-    marginBottom: Spacing.sm,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: FontSize.lg,
-    color: Colors.muted,
-    textAlign: 'center',
-    marginBottom: Spacing.xl,
-    maxWidth: 280,
-    lineHeight: 24,
-  },
-  features: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    marginBottom: Spacing.xxl,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-  },
-  featureText: {
-    fontSize: FontSize.sm,
-    color: Colors.muted,
-  },
-  dot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.muted,
-    opacity: 0.5,
-  },
-  button: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md + 2,
-    borderRadius: Radius.xl,
-    minWidth: 200,
-    alignItems: 'center',
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  buttonText: {
-    color: '#ffffff',
-    fontSize: FontSize.lg,
-    fontWeight: '600',
-  },
-});
+const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      paddingHorizontal: theme.spacing.lg,
+      justifyContent: 'center',
+      overflow: 'hidden',
+      backgroundColor: theme.colors.background,
+    },
+    heroBackdrop: {
+      position: 'absolute',
+      top: 0,
+      left: -80,
+      right: -80,
+      height: 320,
+      borderBottomLeftRadius: 140,
+      borderBottomRightRadius: 180,
+      backgroundColor: theme.colors.backgroundElevated,
+    },
+    heroBlob: {
+      position: 'absolute',
+      top: 90,
+      right: -45,
+      width: 180,
+      height: 180,
+      borderRadius: 90,
+      backgroundColor: theme.colors.primarySoft,
+      opacity: theme.isDark ? 0.9 : 0.8,
+    },
+    content: {
+      gap: theme.spacing.md,
+    },
+    brandPill: {
+      alignSelf: 'flex-start',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.xs,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.radius.full,
+      paddingHorizontal: theme.spacing.sm + 2,
+      paddingVertical: theme.spacing.xs + 2,
+    },
+    brandPillText: {
+      color: theme.colors.textMuted,
+      fontSize: theme.fontSize.xs,
+      fontWeight: '600',
+    },
+    logoBox: {
+      width: 78,
+      height: 78,
+      borderRadius: 26,
+      backgroundColor: theme.colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: theme.spacing.sm,
+      ...theme.shadows.floating,
+    },
+    title: {
+      fontSize: theme.fontSize.xxxl + 2,
+      fontWeight: '800',
+      color: theme.colors.text,
+      letterSpacing: -0.8,
+      marginTop: theme.spacing.sm,
+    },
+    subtitle: {
+      fontSize: theme.fontSize.base,
+      color: theme.colors.textMuted,
+      lineHeight: 23,
+      maxWidth: 340,
+    },
+    features: {
+      gap: theme.spacing.sm,
+      marginTop: theme.spacing.sm,
+      marginBottom: theme.spacing.lg,
+    },
+    featureItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+    },
+    featureIconWrap: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: theme.colors.softHighlight,
+      borderWidth: 1,
+      borderColor: theme.colors.primarySoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    featureText: {
+      fontSize: theme.fontSize.sm,
+      color: theme.colors.text,
+      fontWeight: '500',
+    },
+    primaryBtn: {
+      height: 54,
+      borderRadius: theme.radius.lg,
+      backgroundColor: theme.colors.primary,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: theme.spacing.sm,
+      ...theme.shadows.floating,
+    },
+    primaryBtnText: {
+      color: theme.colors.onPrimary,
+      fontSize: theme.fontSize.base,
+      fontWeight: '700',
+    },
+    footnote: {
+      textAlign: 'center',
+      fontSize: theme.fontSize.sm,
+      color: theme.colors.textMuted,
+      marginTop: theme.spacing.sm,
+    },
+  });

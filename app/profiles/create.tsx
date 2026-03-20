@@ -1,13 +1,21 @@
 import { useState } from 'react';
 import {
-  View, Text, Pressable, StyleSheet, ScrollView,
-  TextInput, ActivityIndicator, Switch,
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  ScrollView,
+  TextInput,
+  ActivityIndicator,
+  Switch,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
+import ScreenContainer from '@/components/ui/ScreenContainer';
+import SurfaceCard from '@/components/ui/SurfaceCard';
 import { useProfile, DEFAULT_BEVERAGES } from '@/contexts/ProfileContext';
-import { Colors, Spacing, Radius, FontSize } from '@/theme/colors';
+import { useAppTheme } from '@/theme/useAppTheme';
 
 const TOTAL_STEPS = 7;
 
@@ -26,7 +34,7 @@ const intervalOptions = [
 ];
 
 const themeColors: Record<string, string> = {
-  midnight: '#7c3aed',
+  midnight: '#4f46e5',
   ocean: '#0891b2',
   mint: '#10b981',
   sunset: '#f97316',
@@ -36,6 +44,8 @@ const themeColors: Record<string, string> = {
 export default function ProfileCreateScreen() {
   const router = useRouter();
   const { createProfile, setCurrentProfile, addBeverage } = useProfile();
+  const theme = useAppTheme();
+  const styles = createStyles(theme);
 
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -60,7 +70,7 @@ export default function ProfileCreateScreen() {
     selected_beverages: ['Water', 'Tea', 'Coffee'] as string[],
   });
 
-  const update = (d: Partial<typeof form>) => setForm(p => ({ ...p, ...d }));
+  const update = (d: Partial<typeof form>) => setForm((p) => ({ ...p, ...d }));
 
   const convertHeight = () => {
     const ft = parseFloat(form.height_ft) || 0;
@@ -87,7 +97,7 @@ export default function ProfileCreateScreen() {
     }
     setLoading(true);
 
-    const goal = form.goal_mode === 'auto' ? calcGoal() : (parseFloat(form.manual_goal) || calcGoal());
+    const goal = form.goal_mode === 'auto' ? calcGoal() : parseFloat(form.manual_goal) || calcGoal();
 
     const profile = await createProfile({
       first_name: form.first_name.trim(),
@@ -115,7 +125,7 @@ export default function ProfileCreateScreen() {
     }
 
     for (const bevName of form.selected_beverages) {
-      const bev = DEFAULT_BEVERAGES.find(b => b.name === bevName);
+      const bev = DEFAULT_BEVERAGES.find((b) => b.name === bevName);
       if (bev) {
         await addBeverage({
           name: bev.name,
@@ -132,333 +142,329 @@ export default function ProfileCreateScreen() {
   };
 
   const goto = (n: number) => {
-    if (n < 1) { router.back(); return; }
-    if (n > TOTAL_STEPS) { handleSubmit(); return; }
+    if (n < 1) {
+      router.back();
+      return;
+    }
+    if (n > TOTAL_STEPS) {
+      handleSubmit();
+      return;
+    }
     setStep(n);
   };
 
   const progress = step / TOTAL_STEPS;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.headerBar}>
-        <Pressable onPress={() => goto(step - 1)} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={20} color={Colors.muted} />
-        </Pressable>
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${progress * 100}%` as any }]} />
+    <ScreenContainer>
+      <View style={styles.container}>
+        <View style={styles.headerBar}>
+          <Pressable onPress={() => goto(step - 1)} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={20} color={theme.colors.textMuted} />
+          </Pressable>
+
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${progress * 100}%` as any }]} />
+          </View>
+
+          <Text style={styles.stepLabel}>{step}/{TOTAL_STEPS}</Text>
         </View>
-        <Text style={styles.stepLabel}>{step}/{TOTAL_STEPS}</Text>
-      </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-        {step === 1 && (
-          <View style={styles.stepBody}>
-            <Text style={styles.stepTitle}>What's your name?</Text>
-            <Text style={styles.stepSub}>Personalizes your experience</Text>
-            <TextInput style={styles.input} placeholder="First Name" placeholderTextColor={Colors.muted} value={form.first_name} onChangeText={v => update({ first_name: v })} />
-            <TextInput style={styles.input} placeholder="Last Name (optional)" placeholderTextColor={Colors.muted} value={form.last_name} onChangeText={v => update({ last_name: v })} />
-          </View>
-        )}
-
-        {step === 2 && (
-          <View style={styles.stepBody}>
-            <Text style={styles.stepTitle}>Your body metrics</Text>
-            <Text style={styles.stepSub}>Used to calculate your hydration goal</Text>
-
-            <View style={styles.unitToggle}>
-              {(['oz', 'ml'] as const).map(u => (
-                <Pressable
-                  key={u}
-                  style={[styles.unitBtn, form.unit_preference === u && styles.unitBtnActive]}
-                  onPress={() => update({ unit_preference: u })}
-                >
-                  <Text style={[styles.unitBtnText, form.unit_preference === u && styles.unitBtnTextActive]}>{u}</Text>
-                </Pressable>
-              ))}
-            </View>
-
-            <TextInput style={styles.input} placeholder="Age (optional)" placeholderTextColor={Colors.muted} value={form.age} onChangeText={v => update({ age: v })} keyboardType="numeric" />
-            <View style={styles.row}>
-              <TextInput style={[styles.input, styles.flex1]} placeholder="Height ft" placeholderTextColor={Colors.muted} value={form.height_ft} onChangeText={v => update({ height_ft: v })} keyboardType="numeric" />
-              <TextInput style={[styles.input, styles.flex1]} placeholder="Height in" placeholderTextColor={Colors.muted} value={form.height_in} onChangeText={v => update({ height_in: v })} keyboardType="numeric" />
-            </View>
-            <TextInput style={styles.input} placeholder="Weight (lbs, optional)" placeholderTextColor={Colors.muted} value={form.weight_lb} onChangeText={v => update({ weight_lb: v })} keyboardType="numeric" />
-          </View>
-        )}
-
-        {step === 3 && (
-          <View style={styles.stepBody}>
-            <Text style={styles.stepTitle}>Activity level</Text>
-            <Text style={styles.stepSub}>Affects your daily hydration target</Text>
-            {activityLevels.map(a => (
-              <Pressable
-                key={a.id}
-                style={[styles.optionCard, form.activity_level === a.id && styles.optionCardActive]}
-                onPress={() => update({ activity_level: a.id })}
-              >
-                <Text style={[styles.optionLabel, form.activity_level === a.id && styles.optionLabelActive]}>{a.label}</Text>
-                <Text style={styles.optionDesc}>{a.desc}</Text>
-                {form.activity_level === a.id && <Ionicons name="checkmark-circle" size={20} color={Colors.primary} style={styles.checkIcon} />}
-              </Pressable>
-            ))}
-          </View>
-        )}
-
-        {step === 4 && (
-          <View style={styles.stepBody}>
-            <Text style={styles.stepTitle}>Daily hydration goal</Text>
-            <Text style={styles.stepSub}>We recommend {calcGoal()} {form.unit_preference} based on your metrics</Text>
-
-            <View style={styles.goalModeRow}>
-              {(['auto', 'manual'] as const).map(m => (
-                <Pressable key={m} style={[styles.unitBtn, form.goal_mode === m && styles.unitBtnActive]} onPress={() => update({ goal_mode: m })}>
-                  <Text style={[styles.unitBtnText, form.goal_mode === m && styles.unitBtnTextActive]}>{m === 'auto' ? 'Auto' : 'Custom'}</Text>
-                </Pressable>
-              ))}
-            </View>
-
-            {form.goal_mode === 'auto' ? (
-              <View style={styles.goalDisplay}>
-                <Text style={styles.goalNumber}>{calcGoal()}</Text>
-                <Text style={styles.goalUnit}>{form.unit_preference} / day</Text>
-              </View>
-            ) : (
-              <TextInput style={styles.input} placeholder={`Goal in ${form.unit_preference}`} placeholderTextColor={Colors.muted} value={form.manual_goal} onChangeText={v => update({ manual_goal: v })} keyboardType="numeric" />
-            )}
-          </View>
-        )}
-
-        {step === 5 && (
-          <View style={styles.stepBody}>
-            <Text style={styles.stepTitle}>Your schedule</Text>
-            <Text style={styles.stepSub}>When do you wake up and go to sleep?</Text>
-
-            <View style={styles.timeRow}>
-              <View style={styles.flex1}>
-                <Text style={styles.timeLabel}>Wake Time</Text>
-                <TextInput
-                  style={styles.input}
-                  value={form.wake_time}
-                  onChangeText={v => update({ wake_time: v })}
-                  placeholder="07:00"
-                  placeholderTextColor={Colors.muted}
-                />
-              </View>
-              <View style={styles.flex1}>
-                <Text style={styles.timeLabel}>Sleep Time</Text>
-                <TextInput
-                  style={styles.input}
-                  value={form.sleep_time}
-                  onChangeText={v => update({ sleep_time: v })}
-                  placeholder="22:00"
-                  placeholderTextColor={Colors.muted}
-                />
-              </View>
-            </View>
-
-            <Text style={[styles.stepSub, { marginTop: Spacing.lg }]}>Reminder interval</Text>
-            <View style={styles.chipRow}>
-              {intervalOptions.map(opt => (
-                <Pressable
-                  key={opt.value}
-                  style={[styles.chip, form.interval_length === opt.value && styles.chipActive]}
-                  onPress={() => update({ interval_length: opt.value })}
-                >
-                  <Text style={[styles.chipText, form.interval_length === opt.value && styles.chipTextActive]}>{opt.label}</Text>
-                </Pressable>
-              ))}
-            </View>
-
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Enable reminders</Text>
-              <Switch value={form.reminders_enabled} onValueChange={v => update({ reminders_enabled: v })} trackColor={{ false: Colors.border, true: Colors.primary }} />
-            </View>
-          </View>
-        )}
-
-        {step === 6 && (
-          <View style={styles.stepBody}>
-            <Text style={styles.stepTitle}>Beverage library</Text>
-            <Text style={styles.stepSub}>Pick what you drink most</Text>
-            <View style={styles.chipRow}>
-              {DEFAULT_BEVERAGES.map(b => {
-                const selected = form.selected_beverages.includes(b.name);
-                return (
-                  <Pressable
-                    key={b.name}
-                    style={[styles.chip, selected && styles.chipActive]}
-                    onPress={() => {
-                      const next = selected
-                        ? form.selected_beverages.filter(x => x !== b.name)
-                        : [...form.selected_beverages, b.name];
-                      update({ selected_beverages: next });
-                    }}
-                  >
-                    <Text style={[styles.chipText, selected && styles.chipTextActive]}>{b.name}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        )}
-
-        {step === 7 && (
-          <View style={styles.stepBody}>
-            <Text style={styles.stepTitle}>Choose your theme</Text>
-            <Text style={styles.stepSub}>Pick your preferred accent color</Text>
-            {Object.entries(themeColors).map(([id, color]) => (
-              <Pressable
-                key={id}
-                style={[styles.themeCard, form.theme === id && { borderColor: color, borderWidth: 2 }]}
-                onPress={() => update({ theme: id })}
-              >
-                <View style={[styles.themeCircle, { backgroundColor: color }]} />
-                <Text style={styles.themeName}>{id.charAt(0).toUpperCase() + id.slice(1)}</Text>
-                {form.theme === id && <Ionicons name="checkmark-circle" size={20} color={color} style={styles.checkIcon} />}
-              </Pressable>
-            ))}
-          </View>
-        )}
-      </ScrollView>
-
-      <View style={styles.footer}>
-        <Pressable
-          style={[styles.nextBtn, loading && { opacity: 0.6 }]}
-          onPress={() => goto(step + 1)}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <>
-              <Text style={styles.nextBtnText}>{step === TOTAL_STEPS ? 'Create Profile' : 'Continue'}</Text>
-              {step < TOTAL_STEPS && <Ionicons name="arrow-forward" size={18} color="#fff" />}
-              {step === TOTAL_STEPS && <Ionicons name="checkmark" size={18} color="#fff" />}
-            </>
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+          {step === 1 && (
+            <SurfaceCard style={styles.stepBody} accent>
+              <Text style={styles.stepTitle}>What's your name?</Text>
+              <Text style={styles.stepSub}>This personalizes your hydration coach and dashboard.</Text>
+              <TextInput style={styles.input} placeholder="First Name" placeholderTextColor={theme.colors.textMuted} value={form.first_name} onChangeText={(v) => update({ first_name: v })} />
+              <TextInput style={styles.input} placeholder="Last Name (optional)" placeholderTextColor={theme.colors.textMuted} value={form.last_name} onChangeText={(v) => update({ last_name: v })} />
+            </SurfaceCard>
           )}
-        </Pressable>
+
+          {step === 2 && (
+            <SurfaceCard style={styles.stepBody}>
+              <Text style={styles.stepTitle}>Body metrics</Text>
+              <Text style={styles.stepSub}>Used to estimate your ideal hydration target.</Text>
+
+              <View style={styles.unitToggle}>
+                {(['oz', 'ml'] as const).map((u) => (
+                  <Pressable key={u} style={[styles.unitBtn, form.unit_preference === u && styles.unitBtnActive]} onPress={() => update({ unit_preference: u })}>
+                    <Text style={[styles.unitBtnText, form.unit_preference === u && styles.unitBtnTextActive]}>{u.toUpperCase()}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <TextInput style={styles.input} placeholder="Age (optional)" placeholderTextColor={theme.colors.textMuted} value={form.age} onChangeText={(v) => update({ age: v })} keyboardType="numeric" />
+              <View style={styles.row}>
+                <TextInput style={[styles.input, styles.flex1]} placeholder="Height ft" placeholderTextColor={theme.colors.textMuted} value={form.height_ft} onChangeText={(v) => update({ height_ft: v })} keyboardType="numeric" />
+                <TextInput style={[styles.input, styles.flex1]} placeholder="Height in" placeholderTextColor={theme.colors.textMuted} value={form.height_in} onChangeText={(v) => update({ height_in: v })} keyboardType="numeric" />
+              </View>
+              <TextInput style={styles.input} placeholder="Weight (lbs, optional)" placeholderTextColor={theme.colors.textMuted} value={form.weight_lb} onChangeText={(v) => update({ weight_lb: v })} keyboardType="numeric" />
+            </SurfaceCard>
+          )}
+
+          {step === 3 && (
+            <View style={styles.stepBody}>
+              <Text style={styles.stepTitle}>Activity level</Text>
+              <Text style={styles.stepSub}>How active are your typical days?</Text>
+              {activityLevels.map((a) => (
+                <Pressable key={a.id} style={[styles.optionCard, form.activity_level === a.id && styles.optionCardActive]} onPress={() => update({ activity_level: a.id })}>
+                  <Text style={[styles.optionLabel, form.activity_level === a.id && styles.optionLabelActive]}>{a.label}</Text>
+                  <Text style={styles.optionDesc}>{a.desc}</Text>
+                  {form.activity_level === a.id && <Ionicons name="checkmark-circle" size={20} color={theme.colors.primary} style={styles.checkIcon} />}
+                </Pressable>
+              ))}
+            </View>
+          )}
+
+          {step === 4 && (
+            <SurfaceCard style={styles.stepBody} accent>
+              <Text style={styles.stepTitle}>Daily goal</Text>
+              <Text style={styles.stepSub}>Recommended: {calcGoal()} {form.unit_preference} based on your inputs.</Text>
+
+              <View style={styles.goalModeRow}>
+                {(['auto', 'manual'] as const).map((m) => (
+                  <Pressable key={m} style={[styles.unitBtn, form.goal_mode === m && styles.unitBtnActive]} onPress={() => update({ goal_mode: m })}>
+                    <Text style={[styles.unitBtnText, form.goal_mode === m && styles.unitBtnTextActive]}>{m === 'auto' ? 'Auto' : 'Custom'}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {form.goal_mode === 'auto' ? (
+                <View style={styles.goalDisplay}>
+                  <Text style={styles.goalNumber}>{calcGoal()}</Text>
+                  <Text style={styles.goalUnit}>{form.unit_preference} per day</Text>
+                </View>
+              ) : (
+                <TextInput style={styles.input} placeholder={`Goal in ${form.unit_preference}`} placeholderTextColor={theme.colors.textMuted} value={form.manual_goal} onChangeText={(v) => update({ manual_goal: v })} keyboardType="numeric" />
+              )}
+            </SurfaceCard>
+          )}
+
+          {step === 5 && (
+            <SurfaceCard style={styles.stepBody}>
+              <Text style={styles.stepTitle}>Daily schedule</Text>
+              <Text style={styles.stepSub}>We'll pace hydration through your day.</Text>
+
+              <View style={styles.timeRow}>
+                <View style={styles.flex1}>
+                  <Text style={styles.timeLabel}>Wake</Text>
+                  <TextInput style={styles.input} value={form.wake_time} onChangeText={(v) => update({ wake_time: v })} placeholder="07:00" placeholderTextColor={theme.colors.textMuted} />
+                </View>
+                <View style={styles.flex1}>
+                  <Text style={styles.timeLabel}>Sleep</Text>
+                  <TextInput style={styles.input} value={form.sleep_time} onChangeText={(v) => update({ sleep_time: v })} placeholder="22:00" placeholderTextColor={theme.colors.textMuted} />
+                </View>
+              </View>
+
+              <Text style={[styles.stepSub, { marginTop: theme.spacing.md }]}>Reminder interval</Text>
+              <View style={styles.chipRow}>
+                {intervalOptions.map((opt) => (
+                  <Pressable key={opt.value} style={[styles.chip, form.interval_length === opt.value && styles.chipActive]} onPress={() => update({ interval_length: opt.value })}>
+                    <Text style={[styles.chipText, form.interval_length === opt.value && styles.chipTextActive]}>{opt.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <View style={styles.switchRow}>
+                <Text style={styles.switchLabel}>Enable reminders</Text>
+                <Switch value={form.reminders_enabled} onValueChange={(v) => update({ reminders_enabled: v })} trackColor={{ false: theme.colors.border, true: theme.colors.primary }} />
+              </View>
+            </SurfaceCard>
+          )}
+
+          {step === 6 && (
+            <SurfaceCard style={styles.stepBody}>
+              <Text style={styles.stepTitle}>Beverage library</Text>
+              <Text style={styles.stepSub}>Select common drinks for one-tap logging.</Text>
+              <View style={styles.chipRow}>
+                {DEFAULT_BEVERAGES.map((b) => {
+                  const selected = form.selected_beverages.includes(b.name);
+                  return (
+                    <Pressable
+                      key={b.name}
+                      style={[styles.chip, selected && styles.chipActive]}
+                      onPress={() => {
+                        const next = selected ? form.selected_beverages.filter((x) => x !== b.name) : [...form.selected_beverages, b.name];
+                        update({ selected_beverages: next });
+                      }}
+                    >
+                      <Text style={[styles.chipText, selected && styles.chipTextActive]}>{b.name}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </SurfaceCard>
+          )}
+
+          {step === 7 && (
+            <SurfaceCard style={styles.stepBody} accent>
+              <Text style={styles.stepTitle}>Theme accent</Text>
+              <Text style={styles.stepSub}>Choose the accent hue for your profile.</Text>
+              {Object.entries(themeColors).map(([id, color]) => (
+                <Pressable key={id} style={[styles.themeCard, form.theme === id && { borderColor: color }]} onPress={() => update({ theme: id })}>
+                  <View style={[styles.themeCircle, { backgroundColor: color }]} />
+                  <Text style={styles.themeName}>{id.charAt(0).toUpperCase() + id.slice(1)}</Text>
+                  {form.theme === id && <Ionicons name="checkmark-circle" size={20} color={color} />}
+                </Pressable>
+              ))}
+            </SurfaceCard>
+          )}
+
+          <View style={styles.footerSpacer} />
+        </ScrollView>
+
+        <View style={styles.footer}>
+          <Pressable style={[styles.nextBtn, loading && { opacity: 0.65 }]} onPress={() => goto(step + 1)} disabled={loading}>
+            {loading ? (
+              <ActivityIndicator color={theme.colors.onPrimary} />
+            ) : (
+              <>
+                <Text style={styles.nextBtnText}>{step === TOTAL_STEPS ? 'Create Profile' : 'Continue'}</Text>
+                <Ionicons name={step === TOTAL_STEPS ? 'checkmark' : 'arrow-forward'} size={18} color={theme.colors.onPrimary} />
+              </>
+            )}
+          </Pressable>
+        </View>
       </View>
-    </View>
+    </ScreenContainer>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  headerBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingTop: 60,
-    paddingHorizontal: Spacing.lg,
-    paddingBottom: Spacing.md,
-    gap: Spacing.md,
-  },
-  backBtn: { padding: Spacing.xs },
-  progressTrack: { flex: 1, height: 4, backgroundColor: Colors.border, borderRadius: 2, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: Colors.primary, borderRadius: 2 },
-  stepLabel: { fontSize: FontSize.sm, color: Colors.muted, width: 32, textAlign: 'right' },
-  scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: Spacing.lg, paddingBottom: 120 },
-  stepBody: { paddingTop: Spacing.lg, gap: Spacing.md },
-  stepTitle: { fontSize: FontSize.xxl, fontWeight: '700', color: Colors.foreground },
-  stepSub: { fontSize: FontSize.base, color: Colors.muted, lineHeight: 22 },
-  input: {
-    backgroundColor: Colors.inputBg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
-    height: 52,
-    color: Colors.foreground,
-    fontSize: FontSize.base,
-  },
-  row: { flexDirection: 'row', gap: Spacing.sm },
-  flex1: { flex: 1 },
-  unitToggle: { flexDirection: 'row', gap: Spacing.sm },
-  unitBtn: {
-    flex: 1,
-    height: 44,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.inputBg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  unitBtnActive: { backgroundColor: Colors.primaryLight, borderColor: Colors.primary },
-  unitBtnText: { fontSize: FontSize.base, color: Colors.muted, fontWeight: '500' },
-  unitBtnTextActive: { color: Colors.primary },
-  optionCard: {
-    backgroundColor: Colors.card,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    padding: Spacing.md,
-    position: 'relative',
-  },
-  optionCardActive: { borderColor: Colors.primary, backgroundColor: Colors.primaryLight },
-  optionLabel: { fontSize: FontSize.base, fontWeight: '600', color: Colors.foreground, marginBottom: 2 },
-  optionLabelActive: { color: Colors.primary },
-  optionDesc: { fontSize: FontSize.sm, color: Colors.muted },
-  checkIcon: { position: 'absolute', top: Spacing.md, right: Spacing.md },
-  goalModeRow: { flexDirection: 'row', gap: Spacing.sm },
-  goalDisplay: { alignItems: 'center', paddingVertical: Spacing.xl },
-  goalNumber: { fontSize: 56, fontWeight: '800', color: Colors.primary },
-  goalUnit: { fontSize: FontSize.base, color: Colors.muted, marginTop: Spacing.xs },
-  timeRow: { flexDirection: 'row', gap: Spacing.md },
-  timeLabel: { fontSize: FontSize.sm, color: Colors.muted, marginBottom: Spacing.xs },
-  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
-  chip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.inputBg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  chipActive: { backgroundColor: Colors.primaryLight, borderColor: Colors.primary },
-  chipText: { fontSize: FontSize.sm, color: Colors.muted },
-  chipTextActive: { color: Colors.primary, fontWeight: '600' },
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.card,
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  switchLabel: { fontSize: FontSize.base, color: Colors.foreground },
-  themeCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.card,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    padding: Spacing.md,
-    gap: Spacing.md,
-  },
-  themeCircle: { width: 32, height: 32, borderRadius: 16 },
-  themeName: { flex: 1, fontSize: FontSize.base, color: Colors.foreground, fontWeight: '500' },
-  footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: Spacing.lg,
-    paddingBottom: 40,
-    backgroundColor: Colors.background,
-  },
-  nextBtn: {
-    flexDirection: 'row',
-    backgroundColor: Colors.primary,
-    borderRadius: Radius.lg,
-    height: 56,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-  },
-  nextBtnText: { color: '#ffffff', fontSize: FontSize.base, fontWeight: '700' },
-});
+const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
+  StyleSheet.create({
+    container: { flex: 1 },
+    headerBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.md,
+      paddingHorizontal: theme.spacing.lg,
+      paddingTop: theme.spacing.sm,
+      paddingBottom: theme.spacing.md,
+    },
+    backBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    progressTrack: {
+      flex: 1,
+      height: 6,
+      borderRadius: 999,
+      overflow: 'hidden',
+      backgroundColor: theme.colors.border,
+    },
+    progressFill: { height: '100%', borderRadius: 999, backgroundColor: theme.colors.primary },
+    stepLabel: { width: 40, textAlign: 'right', color: theme.colors.textMuted, fontSize: theme.fontSize.sm, fontWeight: '700' },
+    scroll: { flex: 1 },
+    scrollContent: { paddingHorizontal: theme.spacing.lg, paddingBottom: 120 },
+    stepBody: { marginBottom: theme.spacing.md, gap: theme.spacing.md },
+    stepTitle: { fontSize: theme.fontSize.xxl, color: theme.colors.text, fontWeight: '800', letterSpacing: -0.4 },
+    stepSub: { fontSize: theme.fontSize.base, color: theme.colors.textMuted, lineHeight: 21 },
+    input: {
+      backgroundColor: theme.colors.input,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.radius.md,
+      paddingHorizontal: theme.spacing.md,
+      height: 50,
+      color: theme.colors.text,
+      fontSize: theme.fontSize.base,
+    },
+    row: { flexDirection: 'row', gap: theme.spacing.sm },
+    flex1: { flex: 1 },
+    unitToggle: { flexDirection: 'row', gap: theme.spacing.sm },
+    unitBtn: {
+      flex: 1,
+      height: 42,
+      borderRadius: theme.radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    unitBtnActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.softHighlight },
+    unitBtnText: { color: theme.colors.textMuted, fontSize: theme.fontSize.sm, fontWeight: '700' },
+    unitBtnTextActive: { color: theme.colors.primary },
+    optionCard: {
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.radius.lg,
+      padding: theme.spacing.md,
+      marginBottom: theme.spacing.sm,
+      position: 'relative',
+      ...theme.shadows.card,
+    },
+    optionCardActive: { borderColor: theme.colors.primary },
+    optionLabel: { color: theme.colors.text, fontWeight: '700', fontSize: theme.fontSize.base },
+    optionLabelActive: { color: theme.colors.primary },
+    optionDesc: { marginTop: 4, color: theme.colors.textMuted, fontSize: theme.fontSize.sm },
+    checkIcon: { position: 'absolute', top: theme.spacing.md, right: theme.spacing.md },
+    goalModeRow: { flexDirection: 'row', gap: theme.spacing.sm },
+    goalDisplay: { alignItems: 'center', paddingVertical: theme.spacing.md },
+    goalNumber: { color: theme.colors.primary, fontSize: 52, fontWeight: '900', letterSpacing: -1 },
+    goalUnit: { marginTop: 2, color: theme.colors.textMuted, fontSize: theme.fontSize.base },
+    timeRow: { flexDirection: 'row', gap: theme.spacing.sm },
+    timeLabel: { marginBottom: theme.spacing.xs, color: theme.colors.textMuted, fontSize: theme.fontSize.sm },
+    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm },
+    chip: {
+      borderRadius: theme.radius.full,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surfaceAlt,
+      paddingHorizontal: theme.spacing.md,
+      paddingVertical: theme.spacing.sm,
+    },
+    chipActive: { borderColor: theme.colors.primary, backgroundColor: theme.colors.softHighlight },
+    chipText: { fontSize: theme.fontSize.sm, color: theme.colors.textMuted, fontWeight: '600' },
+    chipTextActive: { color: theme.colors.primary },
+    switchRow: {
+      marginTop: theme.spacing.sm,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderRadius: theme.radius.lg,
+      padding: theme.spacing.md,
+    },
+    switchLabel: { fontSize: theme.fontSize.base, color: theme.colors.text, fontWeight: '600' },
+    themeCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.radius.lg,
+      padding: theme.spacing.md,
+      marginBottom: theme.spacing.sm,
+    },
+    themeCircle: { width: 28, height: 28, borderRadius: 14 },
+    themeName: { flex: 1, color: theme.colors.text, fontSize: theme.fontSize.base, fontWeight: '600' },
+    footerSpacer: { height: 90 },
+    footer: {
+      position: 'absolute',
+      left: theme.spacing.lg,
+      right: theme.spacing.lg,
+      bottom: 20,
+    },
+    nextBtn: {
+      height: 56,
+      borderRadius: theme.radius.lg,
+      backgroundColor: theme.colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'row',
+      gap: theme.spacing.sm,
+      ...theme.shadows.floating,
+    },
+    nextBtnText: { color: theme.colors.onPrimary, fontSize: theme.fontSize.base, fontWeight: '800' },
+  });

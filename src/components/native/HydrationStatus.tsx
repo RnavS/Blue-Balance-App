@@ -1,24 +1,34 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useProfile } from '@/contexts/ProfileContext';
-import { Colors, FontSize, Radius, Spacing } from '@/theme/colors';
+import { useAppTheme } from '@/theme/useAppTheme';
 
 export default function HydrationStatus() {
   const { getTodayIntake, getExpectedIntake, isOnTrack, currentProfile } = useProfile();
 
   if (!currentProfile) return null;
+  const theme = useAppTheme(currentProfile.theme);
 
   const intake = getTodayIntake();
   const expected = getExpectedIntake();
   const onTrack = isOnTrack();
   const remaining = Math.max(0, currentProfile.daily_goal - intake);
+  const styles = createStyles(theme);
 
   return (
-    <View style={[styles.container, { backgroundColor: onTrack ? Colors.primaryLight : 'rgba(239,68,68,0.1)' }]}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: onTrack ? theme.colors.softHighlight : theme.isDark ? 'rgba(248,113,113,0.12)' : 'rgba(248,113,113,0.1)',
+          borderColor: onTrack ? theme.colors.primarySoft : theme.colors.danger,
+        },
+      ]}
+    >
       <Ionicons
         name={onTrack ? 'checkmark-circle' : 'alert-circle'}
         size={20}
-        color={onTrack ? Colors.primary : Colors.destructive}
+        color={onTrack ? theme.colors.primary : theme.colors.danger}
       />
       <View style={styles.text}>
         <Text style={styles.status}>{onTrack ? 'On Track!' : 'Behind Pace'}</Text>
@@ -30,17 +40,17 @@ export default function HydrationStatus() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    padding: Spacing.md,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  text: { flex: 1 },
-  status: { fontSize: FontSize.base, fontWeight: '600', color: Colors.foreground },
-  detail: { fontSize: FontSize.sm, color: Colors.muted, marginTop: 2 },
-});
+const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
+  StyleSheet.create({
+    container: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+      padding: theme.spacing.md,
+      borderRadius: theme.radius.lg,
+      borderWidth: 1,
+    },
+    text: { flex: 1 },
+    status: { fontSize: theme.fontSize.base, fontWeight: '700', color: theme.colors.text },
+    detail: { fontSize: theme.fontSize.sm, color: theme.colors.textMuted, marginTop: 2 },
+  });

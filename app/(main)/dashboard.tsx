@@ -1,459 +1,510 @@
 import { useState, useCallback } from 'react';
 import {
-  View, Text, ScrollView, Pressable, StyleSheet,
-  TextInput, Modal, FlatList, Platform,
+  View,
+  Text,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  Modal,
+  FlatList,
+  ScrollView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
+import ScreenContainer from '@/components/ui/ScreenContainer';
+import SurfaceCard from '@/components/ui/SurfaceCard';
 import { useProfile, DEFAULT_BEVERAGES } from '@/contexts/ProfileContext';
-import { Colors, Spacing, Radius, FontSize } from '@/theme/colors';
-import { globalStyles } from '@/theme/styles';
+import { useAppTheme } from '@/theme/useAppTheme';
 import ProgressRing from '@/components/native/ProgressRing';
 import IntervalTracker from '@/components/native/IntervalTracker';
 import HydrationStatus from '@/components/native/HydrationStatus';
 
 export default function DashboardScreen() {
   const {
-    currentProfile, waterLogs, addWaterLog, undoLastLog,
-    beverages, addBeverage, deleteBeverage, getTodayIntake,
+    currentProfile,
+    waterLogs,
+    addWaterLog,
+    undoLastLog,
+    beverages,
+    addBeverage,
+    deleteBeverage,
+    getTodayIntake,
   } = useProfile();
   const [showBevModal, setShowBevModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newSize, setNewSize] = useState('');
+  const [showManualLog, setShowManualLog] = useState(false);
+  const [manualName, setManualName] = useState('');
+  const [manualAmount, setManualAmount] = useState('');
 
   if (!currentProfile) return null;
+
+  const theme = useAppTheme(currentProfile.theme);
+  const styles = createStyles(theme);
 
   const unit = currentProfile.unit_preference;
   const todayIntake = getTodayIntake();
   const goalPct = Math.min(todayIntake / currentProfile.daily_goal, 1) * 100;
 
-  const rawName = currentProfile.first_name && currentProfile.first_name.length > 1
-    ? currentProfile.first_name
-    : currentProfile.username && currentProfile.username.length > 1
-      ? currentProfile.username
-      : 'there';
+  const rawName =
+    currentProfile.first_name && currentProfile.first_name.length > 1
+      ? currentProfile.first_name
+      : currentProfile.username && currentProfile.username.length > 1
+        ? currentProfile.username
+        : 'there';
 
-  const presetBevs = beverages.length > 0
-    ? beverages.slice(0, 6)
-    : DEFAULT_BEVERAGES.slice(0, 6).map(b => ({
-        id: b.name,
-        name: b.name,
-        serving_size: unit === 'oz' ? b.serving_size_oz : b.serving_size_ml,
-        hydration_factor: b.hydration_factor,
-        icon: b.icon,
-        profile_id: '',
-        is_default: true,
-        created_at: '',
-      }));
+  const presetBevs =
+    beverages.length > 0
+      ? beverages.slice(0, 8)
+      : DEFAULT_BEVERAGES.slice(0, 8).map((b) => ({
+          id: b.name,
+          name: b.name,
+          serving_size: unit === 'oz' ? b.serving_size_oz : b.serving_size_ml,
+          hydration_factor: b.hydration_factor,
+          icon: b.icon,
+          profile_id: '',
+          is_default: true,
+          created_at: '',
+        }));
 
-  const todayLogs = waterLogs.filter(l => {
-    const d = new Date(); d.setHours(0, 0, 0, 0);
+  const todayLogs = waterLogs.filter((l) => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
     return new Date(l.logged_at) >= d;
   });
 
-  const handleQuickLog = useCallback((bev: typeof presetBevs[0]) => {
-    addWaterLog(bev.serving_size, bev.name, bev.hydration_factor);
-    Toast.show({ type: 'success', text1: `+${bev.serving_size.toFixed(0)} ${unit}`, text2: bev.name });
-  }, [addWaterLog, unit]);
+  const handleQuickLog = useCallback(
+    (bev: (typeof presetBevs)[0]) => {
+      addWaterLog(bev.serving_size, bev.name, bev.hydration_factor);
+      Toast.show({ type: 'success', text1: `${bev.name} logged`, text2: `+${bev.serving_size.toFixed(0)} ${unit}` });
+    },
+    [addWaterLog, unit]
+  );
 
   const handleAddCustomBev = async () => {
-    if (!newName.trim()) { Toast.show({ type: 'error', text1: 'Name required' }); return; }
-    await addBeverage({ name: newName.trim(), serving_size: parseFloat(newSize) || 8, hydration_factor: 1.0, icon: 'droplet' });
-    setNewName(''); setNewSize('');
-    Toast.show({ type: 'success', text1: 'Beverage added!' });
+    if (!newName.trim()) {
+      Toast.show({ type: 'error', text1: 'Name required' });
+      return;
+    }
+    await addBeverage({
+      name: newName.trim(),
+      serving_size: parseFloat(newSize) || (unit === 'oz' ? 8 : 240),
+      hydration_factor: 1.0,
+      icon: 'droplet',
+    });
+    setNewName('');
+    setNewSize('');
+    Toast.show({ type: 'success', text1: 'Beverage added' });
+  };
+
+  const handleManualLog = async () => {
+    if (!manualName.trim()) {
+      Toast.show({ type: 'error', text1: 'Name required', text2: 'Enter a drink name to log manually.' });
+      return;
+    }
+    const amount = parseFloat(manualAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      Toast.show({ type: 'error', text1: 'Invalid amount', text2: `Enter a valid ${unit} amount.` });
+      return;
+    }
+    await addWaterLog(amount, manualName.trim(), 1.0);
+    Toast.show({ type: 'success', text1: `${manualName.trim()} logged`, text2: `+${amount.toFixed(1)} ${unit}` });
+    setManualName('');
+    setManualAmount('');
+    setShowManualLog(false);
   };
 
   return (
-    <View style={globalStyles.screen}>
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.header}>
+    <ScreenContainer scroll accentId={currentProfile.theme}>
+      <View style={styles.container}>
+        <View style={styles.headerRow}>
           <View>
-            <Text style={styles.appName}>Blue Balance</Text>
-            <Text style={styles.greeting}>Good {getTimeOfDay()}, {rawName} 👋</Text>
+            <Text style={styles.eyebrow}>Hydration Overview</Text>
+            <Text style={styles.title}>Hello, {rawName}</Text>
           </View>
-          <Pressable onPress={undoLastLog} style={styles.iconBtn} accessibilityLabel="Undo last log">
-            <Ionicons name="arrow-undo-outline" size={20} color={Colors.muted} />
+          <Pressable style={styles.undoBtn} onPress={undoLastLog} accessibilityLabel="Undo last log">
+            <Ionicons name="arrow-undo" size={18} color={theme.colors.textMuted} />
           </Pressable>
         </View>
 
-        <View style={styles.heroSection}>
-          <View style={styles.glowBehind} />
-          <ProgressRing
-            percentage={goalPct}
-            intake={todayIntake}
-            goal={currentProfile.daily_goal}
-            unit={unit}
-          />
-          <Text style={styles.heroSubtext}>
-            {todayIntake >= currentProfile.daily_goal
-              ? '🎉 Goal achieved!'
-              : `${(currentProfile.daily_goal - todayIntake).toFixed(1)} ${unit} to go`}
-          </Text>
-        </View>
+        <SurfaceCard style={styles.heroCard} accent>
+          <View style={styles.heroTop}>
+            <Text style={styles.heroLabel}>Today's progress</Text>
+            <View style={styles.goalPill}>
+              <Ionicons name="flag-outline" size={12} color={theme.colors.primary} />
+              <Text style={styles.goalPillText}>{currentProfile.daily_goal} {unit} goal</Text>
+            </View>
+          </View>
 
-        <View style={styles.statusRow}>
-          <HydrationStatus />
-        </View>
+          <View style={styles.heroBody}>
+            <ProgressRing percentage={goalPct} intake={todayIntake} goal={currentProfile.daily_goal} unit={unit} accentId={currentProfile.theme} />
+            <View style={styles.heroStats}>
+              <View style={styles.heroStatItem}>
+                <Text style={styles.heroStatValue}>{Math.max(currentProfile.daily_goal - todayIntake, 0).toFixed(0)}</Text>
+                <Text style={styles.heroStatLabel}>{unit} remaining</Text>
+              </View>
+              <View style={styles.heroStatDivider} />
+              <View style={styles.heroStatItem}>
+                <Text style={styles.heroStatValue}>{Math.round(goalPct)}%</Text>
+                <Text style={styles.heroStatLabel}>goal completion</Text>
+              </View>
+            </View>
+          </View>
+        </SurfaceCard>
+
+        <HydrationStatus />
         <IntervalTracker />
 
-        <View style={styles.section}>
+        <SurfaceCard style={styles.manualPrimaryCard} accent>
+          <Text style={styles.sectionTitle}>Log</Text>
+          {!showManualLog ? (
+            <Pressable style={styles.bigLogBtn} onPress={() => setShowManualLog(true)}>
+              <Ionicons name="create-outline" size={18} color={theme.colors.onPrimary} />
+              <Text style={styles.bigLogBtnText}>Log Drink Manually</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.manualLogStack}>
+              <TextInput
+                style={styles.input}
+                placeholder="Drink name"
+                placeholderTextColor={theme.colors.textMuted}
+                value={manualName}
+                onChangeText={setManualName}
+              />
+              <View style={styles.manualLogWrap}>
+                <TextInput
+                  style={[styles.input, styles.flex1]}
+                  placeholder={`Amount in ${unit}`}
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={manualAmount}
+                  onChangeText={setManualAmount}
+                  keyboardType="decimal-pad"
+                />
+                <Pressable style={styles.inlineLogAddBtn} onPress={handleManualLog}>
+                  <Ionicons name="add" size={18} color={theme.colors.onPrimary} />
+                </Pressable>
+              </View>
+              <Pressable style={styles.logCancelBtn} onPress={() => setShowManualLog(false)}>
+                <Text style={styles.logCancelText}>Cancel</Text>
+              </Pressable>
+            </View>
+          )}
+        </SurfaceCard>
+
+        <SurfaceCard style={styles.quickAddCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Quick Add</Text>
-            <Pressable onPress={() => setShowBevModal(true)} style={styles.managePill}>
-              <Ionicons name="settings-outline" size={13} color={Colors.primary} />
-              <Text style={styles.managePillText}>Manage</Text>
+            <Text style={styles.sectionTitle}>Quick add</Text>
+            <Pressable style={styles.manageBtn} onPress={() => setShowBevModal(true)}>
+              <Ionicons name="options-outline" size={14} color={theme.colors.primary} />
+              <Text style={styles.manageText}>Manage</Text>
             </Pressable>
           </View>
 
-          <View style={styles.bevGrid}>
-            {presetBevs.map(bev => (
-              <Pressable
-                key={bev.id}
-                style={({ pressed }) => [styles.bevCard, pressed && styles.bevCardPressed]}
-                onPress={() => handleQuickLog(bev)}
-              >
-                <Text style={styles.bevAmount}>{bev.serving_size.toFixed(0)}</Text>
-                <Text style={styles.bevUnit}>{unit}</Text>
-                <Text style={styles.bevName} numberOfLines={1}>{bev.name}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickStrip}>
+            {presetBevs.map((bev) => (
+              <Pressable key={bev.id} style={styles.quickChip} onPress={() => handleQuickLog(bev)}>
+                <Text style={styles.quickAmount}>{bev.serving_size.toFixed(0)}</Text>
+                <Text style={styles.quickUnit}>{unit}</Text>
+                <Text style={styles.quickName} numberOfLines={1}>{bev.name}</Text>
               </Pressable>
             ))}
-          </View>
-        </View>
+          </ScrollView>
+        </SurfaceCard>
 
-        <View style={[styles.section, styles.logsSection]}>
-          <Text style={styles.sectionTitle}>Today's Logs</Text>
+        <SurfaceCard style={styles.logCard}>
+          <Text style={styles.sectionTitle}>Recent logs</Text>
           {todayLogs.length === 0 ? (
             <View style={styles.emptyLogs}>
-              <Ionicons name="water-outline" size={32} color={Colors.muted} />
-              <Text style={styles.emptyLogsText}>No logs yet today — tap Quick Add to start!</Text>
+              <Ionicons name="water-outline" size={28} color={theme.colors.textMuted} />
+              <Text style={styles.emptyText}>No entries yet for today.</Text>
             </View>
           ) : (
-            todayLogs.slice(0, 10).map((log, i) => (
-              <View key={log.id} style={[styles.logRow, i < todayLogs.length - 1 && styles.logRowBorder]}>
-                <View style={styles.logIconBox}>
-                  <Ionicons name="water" size={14} color={Colors.primary} />
+            todayLogs.slice(0, 8).map((log, i) => (
+              <View key={log.id} style={[styles.logRow, i < Math.min(todayLogs.length, 8) - 1 && styles.logBorder]}>
+                <View style={styles.logIconWrap}>
+                  <Ionicons name="water" size={14} color={theme.colors.primary} />
                 </View>
                 <View style={styles.logInfo}>
                   <Text style={styles.logDrink}>{log.drink_type}</Text>
-                  <Text style={styles.logTime}>
-                    {new Date(log.logged_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </Text>
+                  <Text style={styles.logTime}>{new Date(log.logged_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
                 </View>
                 <Text style={styles.logAmount}>+{log.amount.toFixed(1)} {unit}</Text>
               </View>
             ))
           )}
-        </View>
+        </SurfaceCard>
 
-        <View style={{ height: 100 }} />
-      </ScrollView>
+        <View style={styles.bottomSpacer} />
+      </View>
 
-      <Modal
-        visible={showBevModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowBevModal(false)}
-      >
-        <View style={styles.modal}>
-          <View style={styles.modalDrag} />
-          <Text style={styles.modalTitle}>Manage Beverages</Text>
+      <Modal visible={showBevModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShowBevModal(false)}>
+        <ScreenContainer accentId={currentProfile.theme}>
+          <View style={styles.modalWrap}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Manage Beverages</Text>
 
-          <View style={styles.modalAddRow}>
-            <TextInput
-              style={[styles.input, { flex: 1 }]}
-              placeholder="Beverage name"
-              placeholderTextColor={Colors.muted}
-              value={newName}
-              onChangeText={setNewName}
+            <View style={styles.modalAddRow}>
+              <TextInput
+                style={[styles.input, styles.flex1]}
+                placeholder="Beverage name"
+                placeholderTextColor={theme.colors.textMuted}
+                value={newName}
+                onChangeText={setNewName}
+              />
+              <TextInput
+                style={[styles.input, styles.modalAmountInput]}
+                placeholder={unit}
+                placeholderTextColor={theme.colors.textMuted}
+                value={newSize}
+                onChangeText={setNewSize}
+                keyboardType="numeric"
+              />
+              <Pressable style={styles.addBtn} onPress={handleAddCustomBev}>
+                <Ionicons name="add" size={20} color={theme.colors.onPrimary} />
+              </Pressable>
+            </View>
+
+            <FlatList
+              data={beverages}
+              keyExtractor={(b) => b.id}
+              renderItem={({ item }) => (
+                <View style={styles.bevListRow}>
+                  <View style={styles.bevIconWrap}>
+                    <Ionicons name="water" size={15} color={theme.colors.primary} />
+                  </View>
+                  <View style={styles.flex1}>
+                    <Text style={styles.bevName}>{item.name}</Text>
+                    <Text style={styles.bevMeta}>{item.serving_size} {unit} · {Math.round(item.hydration_factor * 100)}% hydration</Text>
+                  </View>
+                  <Pressable onPress={() => deleteBeverage(item.id)} style={styles.deleteBtn}>
+                    <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+                  </Pressable>
+                </View>
+              )}
+              ListEmptyComponent={<Text style={styles.emptyText}>Add your first custom beverage above.</Text>}
             />
-            <TextInput
-              style={[styles.input, { width: 80 }]}
-              placeholder={unit}
-              placeholderTextColor={Colors.muted}
-              value={newSize}
-              onChangeText={setNewSize}
-              keyboardType="numeric"
-            />
-            <Pressable style={styles.addBtn} onPress={handleAddCustomBev}>
-              <Ionicons name="add" size={22} color="#fff" />
+
+            <Pressable style={styles.doneBtn} onPress={() => setShowBevModal(false)}>
+              <Text style={styles.doneBtnText}>Done</Text>
             </Pressable>
           </View>
-
-          <FlatList
-            data={beverages}
-            keyExtractor={b => b.id}
-            renderItem={({ item }) => (
-              <View style={styles.bevListRow}>
-                <View style={styles.bevListIcon}>
-                  <Ionicons name="water" size={16} color={Colors.primary} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.bevListName}>{item.name}</Text>
-                  <Text style={styles.bevListMeta}>{item.serving_size} {unit} · {Math.round(item.hydration_factor * 100)}% hydration</Text>
-                </View>
-                <Pressable onPress={() => deleteBeverage(item.id)} style={styles.deleteBtn}>
-                  <Ionicons name="trash-outline" size={18} color={Colors.destructive} />
-                </Pressable>
-              </View>
-            )}
-            ListEmptyComponent={
-              <Text style={styles.emptyLogsText}>Add a custom beverage above.</Text>
-            }
-          />
-
-          <Pressable style={styles.doneBtn} onPress={() => setShowBevModal(false)}>
-            <Text style={styles.doneBtnText}>Done</Text>
-          </Pressable>
-        </View>
+        </ScreenContainer>
       </Modal>
-    </View>
+    </ScreenContainer>
   );
 }
 
-function getTimeOfDay() {
-  const h = new Date().getHours();
-  if (h < 12) return 'morning';
-  if (h < 17) return 'afternoon';
-  return 'evening';
-}
-
-const styles = StyleSheet.create({
-  scroll: { paddingBottom: 20 },
-
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Platform.OS === 'web' ? Spacing.xl : 60,
-    paddingBottom: Spacing.sm,
-  },
-  appName: {
-    fontSize: FontSize.xxl,
-    fontWeight: '800',
-    color: Colors.foreground,
-    letterSpacing: -0.5,
-  },
-  greeting: {
-    fontSize: FontSize.sm,
-    color: Colors.muted,
-    marginTop: 2,
-  },
-  iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.card,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  heroSection: {
-    alignItems: 'center',
-    paddingVertical: Spacing.xl,
-    position: 'relative',
-  },
-  glowBehind: {
-    position: 'absolute',
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    backgroundColor: Colors.primaryGlow,
-    opacity: 0.25,
-  },
-  heroSubtext: {
-    marginTop: Spacing.md,
-    fontSize: FontSize.base,
-    color: Colors.muted,
-    fontWeight: '500',
-  },
-
-  statusRow: {
-    marginHorizontal: Spacing.md,
-    marginBottom: Spacing.sm,
-  },
-
-  section: {
-    marginHorizontal: Spacing.md,
-    marginBottom: Spacing.md,
-    backgroundColor: Colors.card,
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    padding: Spacing.md,
-  },
-  logsSection: {
-    paddingBottom: Spacing.lg,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: Spacing.md,
-  },
-  sectionTitle: {
-    fontSize: FontSize.base,
-    fontWeight: '700',
-    color: Colors.foreground,
-  },
-  managePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: Colors.primaryLight,
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 4,
-  },
-  managePillText: {
-    fontSize: FontSize.xs,
-    color: Colors.primary,
-    fontWeight: '600',
-  },
-
-  bevGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-  },
-  bevCard: {
-    width: '30%',
-    minWidth: 80,
-    backgroundColor: Colors.primaryLight,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(124,58,237,0.25)',
-    paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.sm,
-    alignItems: 'center',
-  },
-  bevCardPressed: {
-    opacity: 0.75,
-    transform: [{ scale: 0.97 }],
-  },
-  bevAmount: {
-    fontSize: FontSize.xl,
-    fontWeight: '800',
-    color: Colors.primary,
-  },
-  bevUnit: {
-    fontSize: FontSize.xs,
-    color: Colors.primary,
-    opacity: 0.7,
-    marginTop: -2,
-  },
-  bevName: {
-    fontSize: FontSize.xs,
-    color: Colors.muted,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-
-  logRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-    gap: Spacing.sm,
-  },
-  logRowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  logIconBox: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logInfo: { flex: 1 },
-  logDrink: { fontSize: FontSize.sm, fontWeight: '500', color: Colors.foreground },
-  logTime: { fontSize: FontSize.xs, color: Colors.muted },
-  logAmount: { fontSize: FontSize.sm, fontWeight: '700', color: Colors.primary },
-
-  emptyLogs: {
-    alignItems: 'center',
-    paddingVertical: Spacing.xl,
-    gap: Spacing.sm,
-  },
-  emptyLogsText: {
-    fontSize: FontSize.sm,
-    color: Colors.muted,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-
-  modal: {
-    flex: 1,
-    backgroundColor: Colors.card,
-    padding: Spacing.lg,
-    paddingTop: Spacing.md,
-  },
-  modalDrag: {
-    width: 40, height: 4, borderRadius: 2,
-    backgroundColor: Colors.border,
-    alignSelf: 'center',
-    marginBottom: Spacing.lg,
-  },
-  modalTitle: {
-    fontSize: FontSize.xl,
-    fontWeight: '700',
-    color: Colors.foreground,
-    marginBottom: Spacing.lg,
-  },
-  modalAddRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    marginBottom: Spacing.lg,
-  },
-  input: {
-    backgroundColor: Colors.inputBg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
-    height: 48,
-    color: Colors.foreground,
-    fontSize: FontSize.base,
-  },
-  addBtn: {
-    width: 48, height: 48,
-    backgroundColor: Colors.primary,
-    borderRadius: Radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bevListRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-    gap: Spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.border,
-  },
-  bevListIcon: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: Colors.primaryLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bevListName: { fontSize: FontSize.base, color: Colors.foreground, fontWeight: '500' },
-  bevListMeta: { fontSize: FontSize.xs, color: Colors.muted, marginTop: 2 },
-  deleteBtn: { padding: Spacing.xs },
-  doneBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: Radius.lg,
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: Spacing.lg,
-    marginBottom: 40,
-  },
-  doneBtnText: { color: '#fff', fontSize: FontSize.base, fontWeight: '600' },
-});
+const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
+  StyleSheet.create({
+    container: {
+      paddingHorizontal: theme.spacing.lg,
+      paddingTop: theme.spacing.sm,
+      gap: theme.spacing.md,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: theme.spacing.xs,
+    },
+    eyebrow: {
+      fontSize: theme.fontSize.xs,
+      color: theme.colors.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+      fontWeight: '700',
+    },
+    title: {
+      marginTop: 3,
+      fontSize: theme.fontSize.xxl + 2,
+      color: theme.colors.text,
+      fontWeight: '800',
+      letterSpacing: -0.5,
+    },
+    undoBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    heroCard: { gap: theme.spacing.sm },
+    heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    heroLabel: { fontSize: theme.fontSize.sm, color: theme.colors.textMuted, fontWeight: '600' },
+    goalPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.xs,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.radius.full,
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: 5,
+    },
+    goalPillText: { fontSize: theme.fontSize.xs, color: theme.colors.text, fontWeight: '600' },
+    heroBody: { alignItems: 'center', gap: theme.spacing.sm },
+    heroStats: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      width: '100%',
+      justifyContent: 'space-between',
+      paddingHorizontal: theme.spacing.md,
+    },
+    heroStatItem: { flex: 1, alignItems: 'center' },
+    heroStatValue: { fontSize: theme.fontSize.xl, color: theme.colors.text, fontWeight: '800' },
+    heroStatLabel: { marginTop: 2, fontSize: theme.fontSize.xs, color: theme.colors.textMuted },
+    heroStatDivider: { width: 1, height: 28, backgroundColor: theme.colors.border },
+    manualPrimaryCard: { gap: theme.spacing.sm },
+    bigLogBtn: {
+      height: 54,
+      borderRadius: theme.radius.lg,
+      backgroundColor: theme.colors.primary,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: theme.spacing.sm,
+      ...theme.shadows.card,
+    },
+    bigLogBtnText: { color: theme.colors.onPrimary, fontSize: theme.fontSize.base, fontWeight: '800' },
+    manualLogStack: { gap: theme.spacing.sm },
+    logCancelBtn: {
+      height: 40,
+      borderRadius: theme.radius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.borderStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    logCancelText: { color: theme.colors.textMuted, fontSize: theme.fontSize.sm, fontWeight: '700' },
+    quickAddCard: { gap: theme.spacing.sm },
+    sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    sectionTitle: { color: theme.colors.text, fontSize: theme.fontSize.base, fontWeight: '700' },
+    manageBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: 4,
+      borderRadius: theme.radius.full,
+      borderWidth: 1,
+      borderColor: theme.colors.primarySoft,
+      backgroundColor: theme.colors.softHighlight,
+    },
+    manageText: { fontSize: theme.fontSize.xs, color: theme.colors.primary, fontWeight: '700' },
+    quickStrip: { gap: theme.spacing.sm },
+    quickChip: {
+      width: 92,
+      borderRadius: theme.radius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.primarySoft,
+      backgroundColor: theme.colors.softHighlight,
+      paddingVertical: theme.spacing.md,
+      paddingHorizontal: theme.spacing.sm,
+      alignItems: 'center',
+    },
+    quickAmount: { color: theme.colors.primary, fontSize: theme.fontSize.xl, fontWeight: '800' },
+    quickUnit: { marginTop: -2, color: theme.colors.primary, fontSize: theme.fontSize.xs, opacity: 0.8 },
+    quickName: { marginTop: 4, color: theme.colors.textMuted, fontSize: theme.fontSize.xs, textAlign: 'center' },
+    manualLogWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+    },
+    logCard: { gap: theme.spacing.xs },
+    logRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm, paddingVertical: theme.spacing.sm },
+    logBorder: { borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+    logIconWrap: {
+      width: 28,
+      height: 28,
+      borderRadius: 10,
+      backgroundColor: theme.colors.softHighlight,
+      borderWidth: 1,
+      borderColor: theme.colors.primarySoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    logInfo: { flex: 1 },
+    logDrink: { color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: '600' },
+    logTime: { color: theme.colors.textMuted, fontSize: theme.fontSize.xs, marginTop: 1 },
+    logAmount: { color: theme.colors.primary, fontSize: theme.fontSize.sm, fontWeight: '800' },
+    emptyLogs: { alignItems: 'center', gap: theme.spacing.sm, paddingVertical: theme.spacing.lg },
+    emptyText: { color: theme.colors.textMuted, fontSize: theme.fontSize.sm, textAlign: 'center' },
+    bottomSpacer: { height: 100 },
+    modalWrap: { flex: 1, paddingHorizontal: theme.spacing.lg, paddingBottom: 24 },
+    modalHandle: {
+      width: 42,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: theme.colors.borderStrong,
+      alignSelf: 'center',
+      marginTop: 8,
+      marginBottom: theme.spacing.md,
+    },
+    modalTitle: { color: theme.colors.text, fontSize: theme.fontSize.xl, fontWeight: '800', marginBottom: theme.spacing.md },
+    modalAddRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm, marginBottom: theme.spacing.md },
+    input: {
+      backgroundColor: theme.colors.input,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.radius.md,
+      height: 48,
+      paddingHorizontal: theme.spacing.md,
+      color: theme.colors.text,
+      fontSize: theme.fontSize.base,
+    },
+    flex1: { flex: 1 },
+    inlineLogAddBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: theme.radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primary,
+      ...theme.shadows.card,
+    },
+    modalAmountInput: { width: 84 },
+    addBtn: {
+      width: 48,
+      height: 48,
+      borderRadius: theme.radius.md,
+      backgroundColor: theme.colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    bevListRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.sm,
+      paddingVertical: theme.spacing.sm,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.border,
+    },
+    bevIconWrap: {
+      width: 34,
+      height: 34,
+      borderRadius: 12,
+      backgroundColor: theme.colors.softHighlight,
+      borderWidth: 1,
+      borderColor: theme.colors.primarySoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    bevName: { color: theme.colors.text, fontSize: theme.fontSize.base, fontWeight: '600' },
+    bevMeta: { color: theme.colors.textMuted, fontSize: theme.fontSize.xs, marginTop: 1 },
+    deleteBtn: { padding: theme.spacing.xs },
+    doneBtn: {
+      marginTop: theme.spacing.md,
+      height: 52,
+      borderRadius: theme.radius.lg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primary,
+      ...theme.shadows.card,
+    },
+    doneBtnText: { color: theme.colors.onPrimary, fontSize: theme.fontSize.base, fontWeight: '700' },
+  });

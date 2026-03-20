@@ -1,14 +1,22 @@
 import { useState } from 'react';
 import {
-  View, Text, TextInput, Pressable, StyleSheet,
-  ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform,
+  View,
+  Text,
+  TextInput,
+  Pressable,
+  StyleSheet,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import { z } from 'zod';
+import ScreenContainer from '@/components/ui/ScreenContainer';
+import SurfaceCard from '@/components/ui/SurfaceCard';
 import { useAuth } from '@/contexts/AuthContext';
-import { Colors, Spacing, Radius, FontSize } from '@/theme/colors';
+import { useAppTheme } from '@/theme/useAppTheme';
 
 const emailSchema = z.string().email('Please enter a valid email address');
 const passwordSchema = z.string().min(6, 'Password must be at least 6 characters');
@@ -18,15 +26,19 @@ type AuthMode = 'choice' | 'signin' | 'signup' | 'reset';
 export default function AuthScreen() {
   const router = useRouter();
   const { signInWithEmail, signUpWithEmail, resetPassword } = useAuth();
+  const theme = useAppTheme();
+  const styles = createStyles(theme);
 
   const [mode, setMode] = useState<AuthMode>('choice');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const normalizedEmail = email.trim().toLowerCase();
+
   const validate = () => {
     try {
-      emailSchema.parse(email);
+      emailSchema.parse(normalizedEmail);
       if (mode !== 'reset') passwordSchema.parse(password);
       return true;
     } catch (err) {
@@ -40,7 +52,7 @@ export default function AuthScreen() {
   const handleSignIn = async () => {
     if (!validate()) return;
     setLoading(true);
-    const { error } = await signInWithEmail(email, password);
+    const { error } = await signInWithEmail(normalizedEmail, password);
     if (error) {
       const msg = error.message.includes('Invalid login credentials') ? 'Invalid email or password.' : error.message;
       Toast.show({ type: 'error', text1: 'Sign in failed', text2: msg });
@@ -51,11 +63,11 @@ export default function AuthScreen() {
   const handleSignUp = async () => {
     if (!validate()) return;
     setLoading(true);
-    const { error } = await signUpWithEmail(email, password);
+    const { error } = await signUpWithEmail(normalizedEmail, password);
     if (error) {
       Toast.show({ type: 'error', text1: 'Sign up failed', text2: error.message });
     } else {
-      Toast.show({ type: 'success', text1: 'Check your email', text2: 'We sent a confirmation link.' });
+      Toast.show({ type: 'success', text1: 'Account created', text2: 'Welcome to Blue Balance.' });
     }
     setLoading(false);
   };
@@ -63,7 +75,7 @@ export default function AuthScreen() {
   const handleReset = async () => {
     if (!validate()) return;
     setLoading(true);
-    const { error } = await resetPassword(email);
+    const { error } = await resetPassword(normalizedEmail);
     if (error) {
       Toast.show({ type: 'error', text1: 'Reset failed', text2: error.message });
     } else {
@@ -72,55 +84,84 @@ export default function AuthScreen() {
     setLoading(false);
   };
 
+  const title =
+    mode === 'signin'
+      ? 'Sign in'
+      : mode === 'signup'
+        ? 'Create account'
+        : mode === 'reset'
+          ? 'Reset password'
+          : 'Welcome';
+
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+    <ScreenContainer scroll>
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.header}>
-          <Pressable onPress={() => mode === 'choice' ? router.back() : setMode('choice')} style={styles.backBtn}>
-            <Ionicons name="arrow-back" size={20} color={Colors.muted} />
+          <Pressable onPress={() => (mode === 'choice' ? router.back() : setMode('choice'))} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={20} color={theme.colors.textMuted} />
           </Pressable>
-          <View style={styles.logoRow}>
-            <Ionicons name="water" size={32} color={Colors.primary} />
-            <Text style={styles.logoText}>Blue Balance</Text>
+          <View style={styles.brandRow}>
+            <View style={styles.brandIcon}>
+              <Ionicons name="water" size={18} color={theme.colors.onPrimary} />
+            </View>
+            <Text style={styles.brandText}>Blue Balance</Text>
           </View>
         </View>
 
+        <View style={styles.hero}>
+          <Text style={styles.heroTitle}>{title}</Text>
+          <Text style={styles.heroSubtitle}>Simple hydration tracking built for everyday momentum.</Text>
+        </View>
+
         {mode === 'choice' && (
-          <View style={styles.body}>
-            <Text style={styles.title}>Welcome back</Text>
-            <Text style={styles.subtitle}>Sign in to continue your hydration journey</Text>
+          <View style={styles.choiceWrap}>
+            <SurfaceCard style={styles.choiceCard} accent>
+              <Text style={styles.choiceTitle}>I already have an account</Text>
+              <Text style={styles.choiceBody}>Continue where you left off with your water history and goals.</Text>
+              <Pressable style={styles.primaryBtn} onPress={() => setMode('signin')}>
+                <Text style={styles.primaryBtnText}>Sign In</Text>
+                <Ionicons name="arrow-forward" size={16} color={theme.colors.onPrimary} />
+              </Pressable>
+            </SurfaceCard>
 
-            <Pressable style={styles.primaryBtn} onPress={() => setMode('signin')}>
-              <Ionicons name="mail" size={18} color="#fff" />
-              <Text style={styles.primaryBtnText}>Sign in with Email</Text>
-            </Pressable>
+            <SurfaceCard style={styles.choiceCard}>
+              <Text style={styles.choiceTitle}>I’m new here</Text>
+              <Text style={styles.choiceBody}>Set your profile once and Blue Balance handles the rest.</Text>
+              <Pressable style={styles.secondaryBtn} onPress={() => setMode('signup')}>
+                <Text style={styles.secondaryBtnText}>Create Account</Text>
+              </Pressable>
+            </SurfaceCard>
 
-            <Pressable style={styles.ghostBtn} onPress={() => setMode('signup')}>
-              <Text style={styles.ghostBtnText}>Create account</Text>
-            </Pressable>
-
-            <Pressable onPress={() => setMode('reset')}>
-              <Text style={styles.linkText}>Forgot password?</Text>
+            <Pressable style={styles.resetLinkWrap} onPress={() => setMode('reset')}>
+              <Text style={styles.resetLink}>Forgot password?</Text>
             </Pressable>
           </View>
         )}
 
         {(mode === 'signin' || mode === 'signup' || mode === 'reset') && (
-          <View style={styles.body}>
-            <Text style={styles.title}>
-              {mode === 'signin' ? 'Sign In' : mode === 'signup' ? 'Create Account' : 'Reset Password'}
-            </Text>
+          <SurfaceCard style={styles.formCard} accent>
+            <View style={styles.modeSwitch}>
+              <Pressable style={[styles.modeChip, mode === 'signin' && styles.modeChipActive]} onPress={() => setMode('signin')}>
+                <Text style={[styles.modeChipText, mode === 'signin' && styles.modeChipTextActive]}>Sign In</Text>
+              </Pressable>
+              <Pressable style={[styles.modeChip, mode === 'signup' && styles.modeChipActive]} onPress={() => setMode('signup')}>
+                <Text style={[styles.modeChipText, mode === 'signup' && styles.modeChipTextActive]}>Create</Text>
+              </Pressable>
+              <Pressable style={[styles.modeChip, mode === 'reset' && styles.modeChipActive]} onPress={() => setMode('reset')}>
+                <Text style={[styles.modeChipText, mode === 'reset' && styles.modeChipTextActive]}>Reset</Text>
+              </Pressable>
+            </View>
 
-            <View style={styles.field}>
-              <Text style={styles.label}>Email</Text>
+            <View style={styles.fieldWrap}>
+              <Text style={styles.fieldLabel}>Email</Text>
               <View style={styles.inputRow}>
-                <Ionicons name="mail-outline" size={16} color={Colors.muted} style={styles.inputIcon} />
+                <Ionicons name="mail-outline" size={16} color={theme.colors.textMuted} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
                   value={email}
                   onChangeText={setEmail}
-                  placeholder="your@email.com"
-                  placeholderTextColor={Colors.muted}
+                  placeholder="you@email.com"
+                  placeholderTextColor={theme.colors.textMuted}
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -129,16 +170,16 @@ export default function AuthScreen() {
             </View>
 
             {mode !== 'reset' && (
-              <View style={styles.field}>
-                <Text style={styles.label}>Password</Text>
+              <View style={styles.fieldWrap}>
+                <Text style={styles.fieldLabel}>Password</Text>
                 <View style={styles.inputRow}>
-                  <Ionicons name="lock-closed-outline" size={16} color={Colors.muted} style={styles.inputIcon} />
+                  <Ionicons name="lock-closed-outline" size={16} color={theme.colors.textMuted} style={styles.inputIcon} />
                   <TextInput
                     style={styles.input}
                     value={password}
                     onChangeText={setPassword}
-                    placeholder="Min 6 characters"
-                    placeholderTextColor={Colors.muted}
+                    placeholder="Minimum 6 characters"
+                    placeholderTextColor={theme.colors.textMuted}
                     secureTextEntry
                   />
                 </View>
@@ -151,63 +192,118 @@ export default function AuthScreen() {
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator color="#fff" size="small" />
+                <ActivityIndicator color={theme.colors.onPrimary} size="small" />
               ) : (
-                <Text style={styles.primaryBtnText}>
-                  {mode === 'signin' ? 'Sign In' : mode === 'signup' ? 'Create Account' : 'Send Reset Email'}
-                </Text>
+                <>
+                  <Text style={styles.primaryBtnText}>
+                    {mode === 'signin' ? 'Continue' : mode === 'signup' ? 'Create Account' : 'Send Reset Link'}
+                  </Text>
+                  <Ionicons name="arrow-forward" size={16} color={theme.colors.onPrimary} />
+                </>
               )}
             </Pressable>
-          </View>
+          </SurfaceCard>
         )}
-      </ScrollView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </ScreenContainer>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  scroll: { flexGrow: 1, padding: Spacing.lg },
-  header: { flexDirection: 'row', alignItems: 'center', marginBottom: Spacing.xxl, marginTop: Spacing.xl },
-  backBtn: { marginRight: Spacing.md, padding: Spacing.xs },
-  logoRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  logoText: { fontSize: FontSize.xl, fontWeight: '700', color: Colors.foreground },
-  body: { flex: 1, gap: Spacing.md },
-  title: { fontSize: FontSize.xxl, fontWeight: '700', color: Colors.foreground, marginBottom: Spacing.xs },
-  subtitle: { fontSize: FontSize.base, color: Colors.muted, lineHeight: 22, marginBottom: Spacing.md },
-  field: { gap: Spacing.xs },
-  label: { fontSize: FontSize.sm, color: Colors.muted, fontWeight: '500' },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.inputBg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.md,
-    height: 52,
-  },
-  inputIcon: { marginRight: Spacing.sm },
-  input: { flex: 1, color: Colors.foreground, fontSize: FontSize.base },
-  primaryBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.primary,
-    borderRadius: Radius.lg,
-    height: 52,
-    gap: Spacing.sm,
-    marginTop: Spacing.sm,
-  },
-  primaryBtnText: { color: '#ffffff', fontSize: FontSize.base, fontWeight: '600' },
-  ghostBtn: {
-    borderWidth: 1,
-    borderColor: Colors.border,
-    borderRadius: Radius.lg,
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ghostBtnText: { color: Colors.foreground, fontSize: FontSize.base, fontWeight: '500' },
-  linkText: { color: Colors.primary, fontSize: FontSize.sm, textAlign: 'center', marginTop: Spacing.sm },
-});
+const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      paddingHorizontal: theme.spacing.lg,
+      paddingBottom: theme.spacing.xl,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: theme.spacing.md,
+      marginTop: theme.spacing.sm,
+    },
+    backBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    brandRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
+    brandIcon: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: theme.colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    brandText: { fontSize: theme.fontSize.base, fontWeight: '700', color: theme.colors.text },
+    hero: { marginTop: theme.spacing.lg, marginBottom: theme.spacing.lg },
+    heroTitle: { fontSize: theme.fontSize.xxxl, fontWeight: '800', color: theme.colors.text, letterSpacing: -0.6 },
+    heroSubtitle: { marginTop: theme.spacing.xs, fontSize: theme.fontSize.base, color: theme.colors.textMuted, lineHeight: 22 },
+    choiceWrap: { gap: theme.spacing.md },
+    choiceCard: { gap: theme.spacing.sm },
+    choiceTitle: { fontSize: theme.fontSize.lg, fontWeight: '700', color: theme.colors.text },
+    choiceBody: { fontSize: theme.fontSize.sm, color: theme.colors.textMuted, lineHeight: 20 },
+    formCard: { gap: theme.spacing.md },
+    modeSwitch: {
+      flexDirection: 'row',
+      backgroundColor: theme.colors.input,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.radius.full,
+      padding: 4,
+      gap: 6,
+    },
+    modeChip: {
+      flex: 1,
+      borderRadius: theme.radius.full,
+      height: 34,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    modeChipActive: { backgroundColor: theme.colors.surface },
+    modeChipText: { fontSize: theme.fontSize.sm, color: theme.colors.textMuted, fontWeight: '600' },
+    modeChipTextActive: { color: theme.colors.text },
+    fieldWrap: { gap: theme.spacing.xs },
+    fieldLabel: { fontSize: theme.fontSize.sm, color: theme.colors.textMuted, fontWeight: '600' },
+    inputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.input,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.radius.md,
+      height: 52,
+      paddingHorizontal: theme.spacing.md,
+    },
+    inputIcon: { marginRight: theme.spacing.sm },
+    input: { flex: 1, color: theme.colors.text, fontSize: theme.fontSize.base },
+    primaryBtn: {
+      height: 52,
+      borderRadius: theme.radius.lg,
+      backgroundColor: theme.colors.primary,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: theme.spacing.sm,
+      ...theme.shadows.card,
+    },
+    primaryBtnText: { color: theme.colors.onPrimary, fontSize: theme.fontSize.base, fontWeight: '700' },
+    secondaryBtn: {
+      height: 48,
+      borderRadius: theme.radius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.borderStrong,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    secondaryBtnText: { color: theme.colors.text, fontSize: theme.fontSize.base, fontWeight: '600' },
+    resetLinkWrap: { alignItems: 'center', marginTop: theme.spacing.sm },
+    resetLink: { color: theme.colors.primary, fontSize: theme.fontSize.sm, fontWeight: '600' },
+  });

@@ -8,6 +8,7 @@ import Toast from 'react-native-toast-message';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { PremiumProvider } from '@/contexts/PremiumContext';
 import { ProfileProvider, useProfile } from '@/contexts/ProfileContext';
+import { ThemeModeProvider } from '@/theme/ThemeModeContext';
 
 const queryClient = new QueryClient();
 
@@ -22,7 +23,6 @@ function RouteGuard() {
 
     const inMain = segments[0] === '(main)';
     const inProfiles = segments[0] === 'profiles';
-    const inAuth = segments[0] === 'auth';
 
     if (!user) {
       if (inMain || inProfiles) router.replace('/');
@@ -30,7 +30,8 @@ function RouteGuard() {
     }
 
     if (profiles.length === 0) {
-      if (inMain) router.replace('/profiles');
+      // Logged-in users without profiles should always be guided to profile setup.
+      if (!inProfiles) router.replace('/profiles');
       return;
     }
 
@@ -58,11 +59,13 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
-          <StatusBar style="light" />
-          <Providers />
-          <Toast />
-        </QueryClientProvider>
+        <ThemeModeProvider>
+          <QueryClientProvider client={queryClient}>
+            <StatusBar style="auto" />
+            <Providers />
+            <Toast />
+          </QueryClientProvider>
+        </ThemeModeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
