@@ -88,7 +88,7 @@ Recent: ${waterLogs.slice(0, 3).map((l) => `${l.amount.toFixed(1)}${unit} ${l.dr
         break;
       case 'add_water':
       case 'log_water':
-        if (params.amount) await addWaterLog(params.amount, params.drink_type || 'Water');
+        if (params.amount) await addWaterLog(params.amount, params.drink_type || 'Water', 1.0, { source: 'coach' });
         break;
       case 'update_interval':
         if (params.interval_length) await updateProfile({ interval_length: params.interval_length });

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -11,12 +11,16 @@ import {
   Switch,
 } from 'react-native';
 import { CameraView, Camera, BarcodeScanningResult } from 'expo-camera';
+import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
+import type { FrameData } from 'scandit-react-native-datacapture-core';
+import type { BarcodeCapture, BarcodeCaptureSession } from 'scandit-react-native-datacapture-barcode';
 import ScreenContainer from '@/components/ui/ScreenContainer';
 import SurfaceCard from '@/components/ui/SurfaceCard';
 import { useProfile } from '@/contexts/ProfileContext';
 import { useAppTheme } from '@/theme/useAppTheme';
+import { inferBeverageCategory } from '@/utils/beverageCategory';
 
 type ViewMode = 'scan' | 'manual' | 'history';
 type BarcodeLookupResult = {
@@ -24,10 +28,18 @@ type BarcodeLookupResult = {
   serving_size: number;
   hydration_factor: number;
   source: 'saved' | 'lookup';
+  lookup_provider?: 'saved' | 'open_food_facts' | 'upcitemdb' | 'go_upc' | 'unknown';
+};
+type ScanditCoreModule = typeof import('scandit-react-native-datacapture-core');
+type ScanditBarcodeModule = typeof import('scandit-react-native-datacapture-barcode');
+type ScanditModules = {
+  core: ScanditCoreModule;
+  barcode: ScanditBarcodeModule;
 };
 
 const BARCODE_CACHE: Record<string, any> = {};
 const GO_UPC_API_KEY = process.env.EXPO_PUBLIC_GO_UPC_API_KEY ?? '';
+const SCANDIT_LICENSE_KEY = process.env.EXPO_PUBLIC_SCANDIT_LICENSE_KEY ?? '';
 
 export default function ScanScreen() {
   const { currentProfile, addWaterLog, scannedBeverages, addScannedBeverage, deleteScannedBeverage } = useProfile();
@@ -40,15 +52,61 @@ export default function ScanScreen() {
   const [confirmName, setConfirmName] = useState('');
   const [confirmSize, setConfirmSize] = useState('');
   const [rememberBarcode, setRememberBarcode] = useState(true);
+  const [confirmingScan, setConfirmingScan] = useState(false);
   const [manualName, setManualName] = useState('');
   const [manualSize, setManualSize] = useState('');
   const scanLockRef = useRef(false);
   const lastScanRef = useRef<{ barcode: string; ts: number } | null>(null);
 
-  useEffect(() => {
+  const isExpoGo =
+    Constants.appOwnership === 'expo' ||
+    Constants.executionEnvironment === 'storeClient';
+  const scanditModules = useMemo<ScanditModules | null>(() => {
+    if (isExpoGo) return null;
+    try {
+      const core = require('scandit-react-native-datacapture-core') as ScanditCoreModule;
+      const barcode = require('scandit-react-native-datacapture-barcode') as ScanditBarcodeModule;
+      return { core, barcode };
+    } catch (_) {
+      return null;
+    }
+  }, [isExpoGo]);
+  const scanditContext = useMemo(
+    () => (SCANDIT_LICENSE_KEY && scanditModules ? scanditModules.core.DataCaptureContext.forLicenseKey(SCANDIT_LICENSE_KEY) : null),
+    [scanditModules]
+  );
+  const useScanditEngine = !isExpoGo && !!scanditContext && !!scanditModules;
+  const barcodeCaptureSettings = useMemo(() => {
+    if (!scanditModules) return null;
+    const settings = new scanditModules.barcode.BarcodeCaptureSettings();
+    settings.enableSymbologies([
+      scanditModules.barcode.Symbology.EAN13UPCA,
+      scanditModules.barcode.Symbology.EAN8,
+      scanditModules.barcode.Symbology.UPCE,
+      scanditModules.barcode.Symbology.Code128,
+    ]);
+    settings.codeDuplicateFilter = 5000;
+    return settings;
+  }, [scanditModules]);
+  const ScanditBarcodeCaptureView = scanditModules?.barcode.BarcodeCaptureView ?? null;
+  const scanditFrameSourceOn = scanditModules?.core.FrameSourceState.On;
+  const canRenderScanditView = !!(useScanditEngine && ScanditBarcodeCaptureView && scanditFrameSourceOn && scanditContext && barcodeCaptureSettings);
+  const scannerEngineNotice = isExpoGo
+    ? 'Running Expo Go fallback scanner. Use a dev build to run Scandit.'
+    : !scanditModules
+      ? 'Scandit native module is not in this build. Rebuild the app to enable it.'
+      : !SCANDIT_LICENSE_KEY
+        ? 'Set EXPO_PUBLIC_SCANDIT_LICENSE_KEY to enable Scandit.'
+        : null;
+
+  const requestCameraPermission = () => {
     Camera.requestCameraPermissionsAsync().then(({ status }) => {
       setHasPermission(status === 'granted');
     });
+  };
+
+  useEffect(() => {
+    requestCameraPermission();
   }, []);
 
   if (!currentProfile) return null;
@@ -209,6 +267,7 @@ export default function ScanScreen() {
         serving_size: saved.serving_size,
         hydration_factor: saved.hydration_factor,
         source: 'saved' as const,
+        lookup_provider: 'saved' as const,
       };
       BARCODE_CACHE[barcode] = result;
       return result;
@@ -217,6 +276,7 @@ export default function ScanScreen() {
     const defaultServing = unit === 'oz' ? 16.9 : 500;
     let resolvedName: string | null = null;
     let resolvedServing: number | null = null;
+    let resolvedProvider: BarcodeLookupResult['lookup_provider'] = 'unknown';
 
     // 1) Open Food Facts (primary)
     try {
@@ -226,6 +286,7 @@ export default function ScanScreen() {
         const p = data.product;
         resolvedName = p.product_name || p.generic_name || resolvedName;
         resolvedServing = extractServingFromOpenFoodFacts(p) ?? resolvedServing;
+        if (resolvedName || resolvedServing) resolvedProvider = 'open_food_facts';
       }
     } catch (_) {
       // Continue fallbacks.
@@ -249,6 +310,7 @@ export default function ScanScreen() {
                 item.title,
               ]);
             }
+            if (resolvedName || resolvedServing) resolvedProvider = 'upcitemdb';
           }
         }
       } catch (_) {
@@ -267,6 +329,7 @@ export default function ScanScreen() {
           if (!resolvedServing) {
             resolvedServing = extractVolumeFromUnknownObject(productNode);
           }
+          if (resolvedName || resolvedServing) resolvedProvider = 'go_upc';
         }
       } catch (_) {
         // Fall through.
@@ -280,6 +343,7 @@ export default function ScanScreen() {
         serving_size: resolvedServing ?? defaultServing,
         hydration_factor: safeName.toLowerCase().includes('water') ? 1.0 : 0.9,
         source: 'lookup',
+        lookup_provider: resolvedProvider,
       };
       BARCODE_CACHE[barcode] = result;
       return result;
@@ -288,23 +352,25 @@ export default function ScanScreen() {
     return null;
   };
 
-  const handleBarcode = async (e: BarcodeScanningResult) => {
+  const handleBarcodeData = async (rawBarcode: string) => {
+    const barcode = rawBarcode.trim();
+    if (!barcode) return;
     if (scanLockRef.current || scanned || loading) return;
 
     const now = Date.now();
-    if (lastScanRef.current && lastScanRef.current.barcode === e.data && now - lastScanRef.current.ts < 8000) {
+    if (lastScanRef.current && lastScanRef.current.barcode === barcode && now - lastScanRef.current.ts < 8000) {
       return;
     }
-    lastScanRef.current = { barcode: e.data, ts: now };
+    lastScanRef.current = { barcode, ts: now };
     scanLockRef.current = true;
 
     setScanned(true);
     setLoading(true);
 
-    const result = await lookupBarcode(e.data);
+    const result = await lookupBarcode(barcode);
 
     if (result) {
-      setPendingScan({ ...result, barcode: e.data });
+      setPendingScan({ ...result, barcode });
       setConfirmName(result.name);
       setConfirmSize(String(result.serving_size));
       setRememberBarcode(result.source === 'saved');
@@ -321,44 +387,74 @@ export default function ScanScreen() {
     }
   };
 
+  const handleExpoBarcode = async (e: BarcodeScanningResult) => {
+    await handleBarcodeData(e.data);
+  };
+
+  const handleScanditDidScan = async (
+    _barcodeCapture: BarcodeCapture,
+    session: BarcodeCaptureSession,
+    _getFrameData: () => Promise<FrameData>
+  ) => {
+    const barcode = session.newlyRecognizedBarcode?.data;
+    if (!barcode) return;
+    await handleBarcodeData(barcode);
+  };
+
   const confirmPendingScan = async () => {
-    if (!pendingScan) return;
+    if (!pendingScan || confirmingScan) return;
     const amount = parseFloat(confirmSize);
     if (!Number.isFinite(amount) || amount <= 0) {
       Toast.show({ type: 'error', text1: 'Invalid size', text2: `Enter a valid amount in ${unit}.` });
       return;
     }
 
-    const finalName = confirmName.trim() || pendingScan.name;
-    await addWaterLog(amount, finalName, pendingScan.hydration_factor);
-
-    if (rememberBarcode) {
-      const existing = scannedBeverages.filter((b) => b.barcode === pendingScan.barcode);
-      for (const item of existing) {
-        await deleteScannedBeverage(item.id);
-      }
-      await addScannedBeverage({
+    setConfirmingScan(true);
+    try {
+      const finalName = confirmName.trim() || pendingScan.name;
+      await addWaterLog(amount, finalName, pendingScan.hydration_factor, {
+        source: 'scan',
         barcode: pendingScan.barcode,
-        name: finalName,
-        serving_size: amount,
-        hydration_factor: pendingScan.hydration_factor,
+        category: inferBeverageCategory(finalName),
+        details: {
+          lookup_source: pendingScan.lookup_provider || pendingScan.source,
+          scanned_barcode: pendingScan.barcode,
+          confirmed_amount: amount,
+          unit,
+        },
       });
-      BARCODE_CACHE[pendingScan.barcode] = {
-        name: finalName,
-        serving_size: amount,
-        hydration_factor: pendingScan.hydration_factor,
-        source: 'saved',
-      };
-    }
 
-    setLastResult({ name: finalName, amount });
-    Toast.show({ type: 'success', text1: finalName, text2: `+${amount.toFixed(1)} ${unit} logged` });
-    setPendingScan(null);
-    setScanned(false);
-    scanLockRef.current = false;
+      if (rememberBarcode) {
+        const existing = scannedBeverages.filter((b) => b.barcode === pendingScan.barcode);
+        for (const item of existing) {
+          await deleteScannedBeverage(item.id);
+        }
+        await addScannedBeverage({
+          barcode: pendingScan.barcode,
+          name: finalName,
+          serving_size: amount,
+          hydration_factor: pendingScan.hydration_factor,
+        });
+        BARCODE_CACHE[pendingScan.barcode] = {
+          name: finalName,
+          serving_size: amount,
+          hydration_factor: pendingScan.hydration_factor,
+          source: 'saved',
+        };
+      }
+
+      setLastResult({ name: finalName, amount });
+      Toast.show({ type: 'success', text1: finalName, text2: `+${amount.toFixed(1)} ${unit} logged` });
+      setPendingScan(null);
+      setScanned(false);
+      scanLockRef.current = false;
+    } finally {
+      setConfirmingScan(false);
+    }
   };
 
   const cancelPendingScan = () => {
+    if (confirmingScan) return;
     setPendingScan(null);
     setScanned(false);
     scanLockRef.current = false;
@@ -370,7 +466,7 @@ export default function ScanScreen() {
       return;
     }
     const amount = parseFloat(manualSize) || (unit === 'oz' ? 8 : 240);
-    await addWaterLog(amount, manualName.trim(), 1.0);
+    await addWaterLog(amount, manualName.trim(), 1.0, { source: 'manual', category: inferBeverageCategory(manualName.trim()) });
     Toast.show({ type: 'success', text1: `${manualName} logged`, text2: `+${amount} ${unit}` });
     setManualName('');
     setManualSize('');
@@ -381,7 +477,7 @@ export default function ScanScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>Scan & Log</Text>
-          <Text style={styles.subtitle}>Saved, Open Food Facts, UPCitemdb, then Go-UPC fallback.</Text>
+          <Text style={styles.subtitle}>Scandit scanner with saved product memory and multi-API fallback.</Text>
         </View>
 
         <View style={styles.segmented}>
@@ -405,7 +501,7 @@ export default function ScanScreen() {
               <View style={styles.centerState}>
                 <Ionicons name="camera-outline" size={42} color={theme.colors.textMuted} />
                 <Text style={styles.stateText}>Camera permission denied.</Text>
-                <Pressable style={styles.permissionBtn} onPress={() => Camera.requestCameraPermissionsAsync().then(({ status }) => setHasPermission(status === 'granted'))}>
+                <Pressable style={styles.permissionBtn} onPress={requestCameraPermission}>
                   <Text style={styles.permissionBtnText}>Grant Permission</Text>
                 </Pressable>
               </View>
@@ -413,12 +509,23 @@ export default function ScanScreen() {
 
             {hasPermission === true && (
               <>
-                <CameraView
-                  style={StyleSheet.absoluteFillObject}
-                  facing="back"
-                  barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128'] }}
-                  onBarcodeScanned={handleBarcode}
-                />
+                {canRenderScanditView && ScanditBarcodeCaptureView ? (
+                  <ScanditBarcodeCaptureView
+                    style={StyleSheet.absoluteFillObject}
+                    context={scanditContext!}
+                    isEnabled={!scanned && !loading}
+                    barcodeCaptureSettings={barcodeCaptureSettings}
+                    desiredCameraState={scanditFrameSourceOn!}
+                    didScan={handleScanditDidScan}
+                  />
+                ) : (
+                  <CameraView
+                    style={StyleSheet.absoluteFillObject}
+                    facing="back"
+                    barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'code128'] }}
+                    onBarcodeScanned={(!scanned && !loading) ? handleExpoBarcode : undefined}
+                  />
+                )}
 
                 <View style={styles.scanOverlay}>
                   <View style={styles.scanBox}>
@@ -429,6 +536,12 @@ export default function ScanScreen() {
                   </View>
                   <Text style={styles.scanHint}>Align the barcode inside the frame</Text>
                 </View>
+
+                {scannerEngineNotice && !canRenderScanditView && (
+                  <View style={styles.engineNotice}>
+                    <Text style={styles.engineNoticeText}>{scannerEngineNotice}</Text>
+                  </View>
+                )}
 
                 {loading && (
                   <View style={styles.loadingOverlay}>
@@ -477,7 +590,12 @@ export default function ScanScreen() {
                 <Pressable
                   style={styles.historyMainTap}
                   onPress={() => {
-                    addWaterLog(item.serving_size, item.name, item.hydration_factor);
+                    addWaterLog(item.serving_size, item.name, item.hydration_factor, {
+                      source: 'scan',
+                      barcode: item.barcode,
+                      category: inferBeverageCategory(item.name),
+                      details: { saved_barcode: true, scanned_barcode: item.barcode },
+                    });
                     Toast.show({ type: 'success', text1: item.name, text2: `+${item.serving_size} ${unit}` });
                   }}
                 >
@@ -552,8 +670,12 @@ export default function ScanScreen() {
               <Pressable style={styles.cancelBtn} onPress={cancelPendingScan}>
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </Pressable>
-              <Pressable style={styles.confirmBtn} onPress={confirmPendingScan}>
-                <Text style={styles.confirmBtnText}>Add</Text>
+              <Pressable
+                style={[styles.confirmBtn, confirmingScan && styles.confirmBtnDisabled]}
+                onPress={confirmPendingScan}
+                disabled={confirmingScan}
+              >
+                <Text style={styles.confirmBtnText}>{confirmingScan ? 'Adding...' : 'Add'}</Text>
               </Pressable>
             </View>
           </View>
@@ -618,6 +740,24 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       paddingHorizontal: theme.spacing.sm,
       paddingVertical: 5,
       borderRadius: theme.radius.full,
+    },
+    engineNotice: {
+      position: 'absolute',
+      top: theme.spacing.md,
+      left: theme.spacing.md,
+      right: theme.spacing.md,
+      borderRadius: theme.radius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: theme.spacing.xs,
+    },
+    engineNoticeText: {
+      color: theme.colors.text,
+      fontSize: theme.fontSize.xs,
+      fontWeight: '600',
+      textAlign: 'center',
     },
     loadingOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.overlay, gap: theme.spacing.sm },
     loadingText: { color: theme.colors.onPrimary, fontSize: theme.fontSize.sm },
@@ -750,6 +890,9 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       justifyContent: 'center',
       backgroundColor: theme.colors.primary,
       ...theme.shadows.card,
+    },
+    confirmBtnDisabled: {
+      opacity: 0.7,
     },
     confirmBtnText: { color: theme.colors.onPrimary, fontSize: theme.fontSize.base, fontWeight: '800' },
   });

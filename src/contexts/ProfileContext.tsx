@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './AuthContext';
+import { inferBeverageCategory, normalizeDrinkName } from '@/utils/beverageCategory';
 
 export interface Beverage {
   id: string;
@@ -56,9 +57,25 @@ export interface WaterLog {
   id: string;
   profile_id: string;
   amount: number;
+  raw_amount?: number | null;
+  hydration_factor?: number | null;
   drink_type: string;
+  category?: string | null;
+  source?: string | null;
+  barcode?: string | null;
+  details?: Record<string, unknown> | null;
   logged_at: string;
   created_at: string;
+}
+
+export type WaterLogSource = 'manual' | 'quick' | 'scan' | 'coach' | 'other';
+
+export interface AddWaterLogOptions {
+  source?: WaterLogSource;
+  category?: string;
+  barcode?: string | null;
+  details?: Record<string, unknown> | null;
+  dedupeWindowMs?: number;
 }
 
 export interface ChatMessage {
@@ -92,12 +109,13 @@ interface ProfileContextType {
   updateProfile: (updates: Partial<Profile>) => Promise<void>;
   deleteProfile: (profileId: string) => Promise<void>;
   fetchProfiles: () => Promise<void>;
-  addWaterLog: (amount: number, drinkType?: string, hydrationFactor?: number) => Promise<void>;
+  addWaterLog: (amount: number, drinkType?: string, hydrationFactor?: number, options?: AddWaterLogOptions) => Promise<void>;
   deleteWaterLog: (logId: string) => Promise<void>;
   undoLastLog: () => Promise<void>;
   getTodayIntake: () => number;
   getEffectiveIntake: () => number;
   getFilteredLogs: (filter: string, customRange?: { start: Date; end: Date }) => WaterLog[];
+  getFluidMix: (filter?: string, customRange?: { start: Date; end: Date }) => Array<{ category: string; amount: number; percentage: number; entries: number }>;
   getExpectedIntake: () => number;
   getExpectedRange: () => { min: number; max: number };
   isOnTrack: () => boolean;
@@ -124,6 +142,8 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const [scannedBeverages, setScannedBeverages] = useState<ScannedBeverage[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const lastAddRef = useRef<{ key: string; ts: number } | null>(null);
+  const inFlightAddKeysRef = useRef<Set<string>>(new Set());
 
   const convertAmount = useCallback((amount: number, fromUnit: 'oz' | 'ml', toUnit: 'oz' | 'ml'): number => {
     if (fromUnit === toUnit) return amount;
@@ -170,16 +190,22 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const fetchWaterLogs = useCallback(async () => {
     if (!currentProfile) { setWaterLogs([]); return; }
     try {
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const historyWindowStart = new Date();
+      historyWindowStart.setDate(historyWindowStart.getDate() - 400);
       const { data, error } = await supabase
         .from('water_logs')
         .select('*')
         .eq('profile_id', currentProfile.id)
-        .gte('logged_at', thirtyDaysAgo.toISOString())
+        .gte('logged_at', historyWindowStart.toISOString())
         .order('logged_at', { ascending: false });
       if (error) throw error;
-      setWaterLogs((data || []).map(log => ({ ...log, amount: Number(log.amount) })));
+      setWaterLogs((data || []).map(log => ({
+        ...log,
+        amount: Number(log.amount),
+        raw_amount: log.raw_amount !== null && log.raw_amount !== undefined ? Number(log.raw_amount) : Number(log.amount),
+        hydration_factor: log.hydration_factor !== null && log.hydration_factor !== undefined ? Number(log.hydration_factor) : 1.0,
+        details: typeof log.details === 'object' && log.details !== null ? (log.details as Record<string, unknown>) : null,
+      })));
     } catch (error) {
       console.error('Error fetching water logs:', error);
     }
@@ -323,23 +349,84 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const addWaterLog = async (amount: number, drinkType = 'Water', hydrationFactor = 1.0) => {
+  const addWaterLog = async (
+    amount: number,
+    drinkType = 'Water',
+    hydrationFactor = 1.0,
+    options: AddWaterLogOptions = {}
+  ) => {
     if (!currentProfile) return;
+    let dedupeKey = '';
     try {
+      const normalizedDrink = normalizeDrinkName(drinkType) || 'Water';
+      const safeRawAmount = Number(amount);
+      if (!Number.isFinite(safeRawAmount) || safeRawAmount <= 0) return;
+
+      const safeHydrationFactor = Number.isFinite(hydrationFactor) && hydrationFactor > 0 ? hydrationFactor : 1.0;
+      const effectiveAmount = safeRawAmount * safeHydrationFactor;
+      const source = options.source || 'manual';
+      const category = (options.category || inferBeverageCategory(normalizedDrink)).toLowerCase();
+      const barcode = options.barcode || null;
+      const details = options.details ?? null;
+      const dedupeWindowMs = Number.isFinite(options.dedupeWindowMs) ? Number(options.dedupeWindowMs) : 4500;
+      dedupeKey = `${currentProfile.id}|${normalizedDrink.toLowerCase()}|${safeRawAmount.toFixed(3)}|${source}|${barcode ?? ''}`;
+      const nowMs = Date.now();
+
+      if (lastAddRef.current && lastAddRef.current.key === dedupeKey && nowMs - lastAddRef.current.ts < dedupeWindowMs) {
+        return;
+      }
+      if (inFlightAddKeysRef.current.has(dedupeKey)) {
+        return;
+      }
+
+      const duplicateInLocalState = waterLogs.some((log) => {
+        const loggedMs = new Date(log.logged_at).getTime();
+        const recentEnough = Number.isFinite(loggedMs) && nowMs - loggedMs >= 0 && nowMs - loggedMs < dedupeWindowMs;
+        if (!recentEnough) return false;
+
+        const logRawAmount = log.raw_amount !== null && log.raw_amount !== undefined ? Number(log.raw_amount) : Number(log.amount);
+        const sameAmount = Math.abs(logRawAmount - safeRawAmount) < 0.001;
+        const sameDrink = normalizeDrinkName(log.drink_type).toLowerCase() === normalizedDrink.toLowerCase();
+        const sameSource = (log.source || 'manual') === source;
+        const sameBarcode = (log.barcode || null) === barcode;
+        return sameAmount && sameDrink && sameSource && sameBarcode;
+      });
+
+      if (duplicateInLocalState) {
+        lastAddRef.current = { key: dedupeKey, ts: nowMs };
+        return;
+      }
+
+      inFlightAddKeysRef.current.add(dedupeKey);
       const { data, error } = await supabase
         .from('water_logs')
         .insert({
           profile_id: currentProfile.id,
-          amount: amount * hydrationFactor,
-          drink_type: drinkType,
+          amount: effectiveAmount,
+          raw_amount: safeRawAmount,
+          hydration_factor: safeHydrationFactor,
+          drink_type: normalizedDrink,
+          category,
+          source,
+          barcode,
+          details: details || {},
           logged_at: new Date().toISOString(),
         })
         .select()
         .single();
       if (error) throw error;
-      setWaterLogs(prev => [{ ...data, amount: Number(data.amount) }, ...prev]);
+      lastAddRef.current = { key: dedupeKey, ts: nowMs };
+      setWaterLogs(prev => [{
+        ...data,
+        amount: Number(data.amount),
+        raw_amount: data.raw_amount !== null && data.raw_amount !== undefined ? Number(data.raw_amount) : Number(data.amount),
+        hydration_factor: data.hydration_factor !== null && data.hydration_factor !== undefined ? Number(data.hydration_factor) : 1.0,
+        details: typeof data.details === 'object' && data.details !== null ? (data.details as Record<string, unknown>) : null,
+      }, ...prev]);
     } catch (error) {
       console.error('Error adding water log:', error);
+    } finally {
+      inFlightAddKeysRef.current.delete(dedupeKey);
     }
   };
 
@@ -374,6 +461,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       case 'day': startDate = new Date(now); startDate.setHours(0, 0, 0, 0); break;
       case 'week': startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
       case 'month': startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); break;
+      case 'year': startDate = new Date(now.getFullYear(), 0, 1); break;
       case 'custom':
         if (customRange) return waterLogs.filter(l => new Date(l.logged_at) >= customRange.start && new Date(l.logged_at) <= customRange.end);
         return waterLogs;
@@ -381,6 +469,33 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     }
     return waterLogs.filter(l => new Date(l.logged_at) >= startDate);
   }, [waterLogs]);
+
+  const getFluidMix = useCallback((filter: string = 'day', customRange?: { start: Date; end: Date }) => {
+    const logs = getFilteredLogs(filter, customRange);
+    const grouped = new Map<string, { category: string; amount: number; entries: number }>();
+
+    let total = 0;
+    for (const log of logs) {
+      const consumed = log.raw_amount !== null && log.raw_amount !== undefined ? Number(log.raw_amount) : Number(log.amount);
+      if (!Number.isFinite(consumed) || consumed <= 0) continue;
+      total += consumed;
+
+      const category = (log.category || inferBeverageCategory(log.drink_type)).toLowerCase();
+      const existing = grouped.get(category) || { category, amount: 0, entries: 0 };
+      existing.amount += consumed;
+      existing.entries += 1;
+      grouped.set(category, existing);
+    }
+
+    if (total <= 0) return [];
+    return [...grouped.values()]
+      .sort((a, b) => b.amount - a.amount)
+      .map((item) => ({
+        ...item,
+        amount: Number(item.amount.toFixed(2)),
+        percentage: Number(((item.amount / total) * 100).toFixed(1)),
+      }));
+  }, [getFilteredLogs]);
 
   const getExpectedIntake = useCallback(() => {
     if (!currentProfile) return 0;
@@ -528,7 +643,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       profiles, currentProfile, waterLogs, beverages, scannedBeverages, chatMessages, loading,
       setCurrentProfile, createProfile, updateProfile, deleteProfile, fetchProfiles,
       addWaterLog, deleteWaterLog, undoLastLog, getTodayIntake, getEffectiveIntake,
-      getFilteredLogs, getExpectedIntake, getExpectedRange, isOnTrack, getStreak,
+      getFilteredLogs, getFluidMix, getExpectedIntake, getExpectedRange, isOnTrack, getStreak,
       getHydrationScore, getCurrentIntervalProgress, addBeverage, deleteBeverage,
       addScannedBeverage, deleteScannedBeverage, addChatMessage, clearChatHistory, convertAmount,
     }}>

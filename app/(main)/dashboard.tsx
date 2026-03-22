@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -13,11 +13,28 @@ import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import ScreenContainer from '@/components/ui/ScreenContainer';
 import SurfaceCard from '@/components/ui/SurfaceCard';
-import { useProfile, DEFAULT_BEVERAGES } from '@/contexts/ProfileContext';
+import { useProfile, DEFAULT_BEVERAGES, WaterLog } from '@/contexts/ProfileContext';
 import { useAppTheme } from '@/theme/useAppTheme';
 import ProgressRing from '@/components/native/ProgressRing';
 import IntervalTracker from '@/components/native/IntervalTracker';
 import HydrationStatus from '@/components/native/HydrationStatus';
+import { formatCategoryLabel } from '@/utils/beverageCategory';
+
+const toDetailLabel = (key: string) =>
+  key
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+
+const toDetailValue = (value: unknown): string => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  try {
+    return JSON.stringify(value);
+  } catch (_) {
+    return '';
+  }
+};
 
 export default function DashboardScreen() {
   const {
@@ -29,6 +46,7 @@ export default function DashboardScreen() {
     addBeverage,
     deleteBeverage,
     getTodayIntake,
+    getFluidMix,
   } = useProfile();
   const [showBevModal, setShowBevModal] = useState(false);
   const [newName, setNewName] = useState('');
@@ -36,6 +54,8 @@ export default function DashboardScreen() {
   const [showManualLog, setShowManualLog] = useState(false);
   const [manualName, setManualName] = useState('');
   const [manualAmount, setManualAmount] = useState('');
+  const [showMixModal, setShowMixModal] = useState(false);
+  const [selectedLog, setSelectedLog] = useState<WaterLog | null>(null);
 
   if (!currentProfile) return null;
 
@@ -72,10 +92,17 @@ export default function DashboardScreen() {
     d.setHours(0, 0, 0, 0);
     return new Date(l.logged_at) >= d;
   });
+  const fluidMix = useMemo(() => getFluidMix('day'), [getFluidMix]);
+  const selectedLogDetails = useMemo(() => {
+    if (!selectedLog?.details || typeof selectedLog.details !== 'object') return [];
+    return Object.entries(selectedLog.details)
+      .map(([key, value]) => ({ key, value: toDetailValue(value) }))
+      .filter((entry) => entry.value.length > 0);
+  }, [selectedLog]);
 
   const handleQuickLog = useCallback(
     (bev: (typeof presetBevs)[0]) => {
-      addWaterLog(bev.serving_size, bev.name, bev.hydration_factor);
+      addWaterLog(bev.serving_size, bev.name, bev.hydration_factor, { source: 'quick' });
       Toast.show({ type: 'success', text1: `${bev.name} logged`, text2: `+${bev.serving_size.toFixed(0)} ${unit}` });
     },
     [addWaterLog, unit]
@@ -107,7 +134,7 @@ export default function DashboardScreen() {
       Toast.show({ type: 'error', text1: 'Invalid amount', text2: `Enter a valid ${unit} amount.` });
       return;
     }
-    await addWaterLog(amount, manualName.trim(), 1.0);
+    await addWaterLog(amount, manualName.trim(), 1.0, { source: 'manual' });
     Toast.show({ type: 'success', text1: `${manualName.trim()} logged`, text2: `+${amount.toFixed(1)} ${unit}` });
     setManualName('');
     setManualAmount('');
@@ -130,9 +157,14 @@ export default function DashboardScreen() {
         <SurfaceCard style={styles.heroCard} accent>
           <View style={styles.heroTop}>
             <Text style={styles.heroLabel}>Today's progress</Text>
-            <View style={styles.goalPill}>
-              <Ionicons name="flag-outline" size={12} color={theme.colors.primary} />
-              <Text style={styles.goalPillText}>{currentProfile.daily_goal} {unit} goal</Text>
+            <View style={styles.heroTopActions}>
+              <View style={styles.goalPill}>
+                <Ionicons name="flag-outline" size={12} color={theme.colors.primary} />
+                <Text style={styles.goalPillText}>{currentProfile.daily_goal} {unit} goal</Text>
+              </View>
+              <Pressable style={styles.mixBtn} onPress={() => setShowMixModal(true)}>
+                <Text style={styles.mixBtnText}>Mix</Text>
+              </Pressable>
             </View>
           </View>
 
@@ -220,7 +252,11 @@ export default function DashboardScreen() {
             </View>
           ) : (
             todayLogs.slice(0, 8).map((log, i) => (
-              <View key={log.id} style={[styles.logRow, i < Math.min(todayLogs.length, 8) - 1 && styles.logBorder]}>
+              <Pressable
+                key={log.id}
+                style={[styles.logRow, i < Math.min(todayLogs.length, 8) - 1 && styles.logBorder]}
+                onPress={() => setSelectedLog(log)}
+              >
                 <View style={styles.logIconWrap}>
                   <Ionicons name="water" size={14} color={theme.colors.primary} />
                 </View>
@@ -228,8 +264,8 @@ export default function DashboardScreen() {
                   <Text style={styles.logDrink}>{log.drink_type}</Text>
                   <Text style={styles.logTime}>{new Date(log.logged_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
                 </View>
-                <Text style={styles.logAmount}>+{log.amount.toFixed(1)} {unit}</Text>
-              </View>
+                <Text style={styles.logAmount}>+{(log.raw_amount ?? log.amount).toFixed(1)} {unit}</Text>
+              </Pressable>
             ))
           )}
         </SurfaceCard>
@@ -290,6 +326,90 @@ export default function DashboardScreen() {
           </View>
         </ScreenContainer>
       </Modal>
+
+      <Modal visible={showMixModal} transparent animationType="fade" onRequestClose={() => setShowMixModal(false)}>
+        <View style={styles.detailBackdrop}>
+          <View style={styles.detailCard}>
+            <View style={styles.detailHeadRow}>
+              <Text style={styles.detailTitle}>Fluid Mix</Text>
+              <Pressable onPress={() => setShowMixModal(false)} style={styles.detailCloseBtn}>
+                <Ionicons name="close" size={18} color={theme.colors.textMuted} />
+              </Pressable>
+            </View>
+            <Text style={styles.detailSub}>Today by beverage category</Text>
+
+            {fluidMix.length === 0 ? (
+              <Text style={styles.emptyText}>No drinks logged yet today.</Text>
+            ) : (
+              fluidMix.map((item) => (
+                <View key={item.category} style={styles.mixRow}>
+                  <View style={styles.mixRowTop}>
+                    <Text style={styles.mixName}>{formatCategoryLabel(item.category)}</Text>
+                    <Text style={styles.mixPct}>{item.percentage}%</Text>
+                  </View>
+                  <View style={styles.mixTrack}>
+                    <View style={[styles.mixFill, { width: `${Math.max(item.percentage, 4)}%` }]} />
+                  </View>
+                  <Text style={styles.mixMeta}>{item.amount.toFixed(1)} {unit} · {item.entries} logs</Text>
+                </View>
+              ))
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={!!selectedLog} transparent animationType="fade" onRequestClose={() => setSelectedLog(null)}>
+        <View style={styles.detailBackdrop}>
+          <View style={styles.detailCard}>
+            <View style={styles.detailHeadRow}>
+              <Text style={styles.detailTitle}>Log Detail</Text>
+              <Pressable onPress={() => setSelectedLog(null)} style={styles.detailCloseBtn}>
+                <Ionicons name="close" size={18} color={theme.colors.textMuted} />
+              </Pressable>
+            </View>
+            {selectedLog && (
+              <View style={styles.detailBody}>
+                <Text style={styles.detailLabel}>Fluid</Text>
+                <Text style={styles.detailValue}>{selectedLog.drink_type || 'Water'}</Text>
+
+                <Text style={styles.detailLabel}>Category</Text>
+                <Text style={styles.detailValue}>{formatCategoryLabel(selectedLog.category || 'other')}</Text>
+
+                <Text style={styles.detailLabel}>Consumed</Text>
+                <Text style={styles.detailValue}>{(selectedLog.raw_amount ?? selectedLog.amount).toFixed(1)} {unit}</Text>
+
+                <Text style={styles.detailLabel}>Hydration Credit</Text>
+                <Text style={styles.detailValue}>{selectedLog.amount.toFixed(1)} {unit}</Text>
+
+                <Text style={styles.detailLabel}>Source</Text>
+                <Text style={styles.detailValue}>{selectedLog.source || 'manual'}</Text>
+
+                {selectedLog.barcode ? (
+                  <>
+                    <Text style={styles.detailLabel}>Barcode</Text>
+                    <Text style={styles.detailValue}>{selectedLog.barcode}</Text>
+                  </>
+                ) : null}
+
+                <Text style={styles.detailLabel}>Logged</Text>
+                <Text style={styles.detailValue}>{new Date(selectedLog.logged_at).toLocaleString()}</Text>
+
+                {selectedLogDetails.length > 0 ? (
+                  <>
+                    <Text style={styles.detailLabel}>Scan details</Text>
+                    {selectedLogDetails.map((entry) => (
+                      <View key={entry.key} style={styles.detailKvRow}>
+                        <Text style={styles.detailKvLabel}>{toDetailLabel(entry.key)}</Text>
+                        <Text style={styles.detailKvValue}>{entry.value}</Text>
+                      </View>
+                    ))}
+                  </>
+                ) : null}
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </ScreenContainer>
   );
 }
@@ -333,6 +453,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
     },
     heroCard: { gap: theme.spacing.sm },
     heroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    heroTopActions: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xs },
     heroLabel: { fontSize: theme.fontSize.sm, color: theme.colors.textMuted, fontWeight: '600' },
     goalPill: {
       flexDirection: 'row',
@@ -346,6 +467,16 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       paddingVertical: 5,
     },
     goalPillText: { fontSize: theme.fontSize.xs, color: theme.colors.text, fontWeight: '600' },
+    mixBtn: {
+      height: 28,
+      minWidth: 46,
+      borderRadius: theme.radius.full,
+      paddingHorizontal: theme.spacing.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primary,
+    },
+    mixBtnText: { color: theme.colors.onPrimary, fontSize: theme.fontSize.xs, fontWeight: '800' },
     heroBody: { alignItems: 'center', gap: theme.spacing.sm },
     heroStats: {
       flexDirection: 'row',
@@ -507,4 +638,72 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       ...theme.shadows.card,
     },
     doneBtnText: { color: theme.colors.onPrimary, fontSize: theme.fontSize.base, fontWeight: '700' },
+    detailBackdrop: {
+      flex: 1,
+      backgroundColor: theme.colors.overlay,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: theme.spacing.lg,
+    },
+    detailCard: {
+      width: '100%',
+      borderRadius: theme.radius.xl,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.md,
+      gap: theme.spacing.xs,
+      ...theme.shadows.floating,
+    },
+    detailHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    detailTitle: { color: theme.colors.text, fontSize: theme.fontSize.xl, fontWeight: '800' },
+    detailSub: { color: theme.colors.textMuted, fontSize: theme.fontSize.sm, marginBottom: theme.spacing.xs },
+    detailCloseBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.input,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    detailBody: { gap: 2, marginTop: 2 },
+    detailLabel: { color: theme.colors.textMuted, fontSize: theme.fontSize.xs, marginTop: theme.spacing.xs },
+    detailValue: { color: theme.colors.text, fontSize: theme.fontSize.base, fontWeight: '700' },
+    detailKvRow: {
+      marginTop: 4,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.input,
+      borderRadius: theme.radius.sm,
+      paddingHorizontal: theme.spacing.sm,
+      paddingVertical: 6,
+    },
+    detailKvLabel: {
+      color: theme.colors.textMuted,
+      fontSize: theme.fontSize.xs,
+      fontWeight: '700',
+    },
+    detailKvValue: {
+      marginTop: 1,
+      color: theme.colors.text,
+      fontSize: theme.fontSize.sm,
+      fontWeight: '600',
+    },
+    mixRow: { marginBottom: theme.spacing.sm },
+    mixRowTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    mixName: { color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: '700' },
+    mixPct: { color: theme.colors.primary, fontSize: theme.fontSize.sm, fontWeight: '800' },
+    mixTrack: {
+      marginTop: 6,
+      height: 8,
+      borderRadius: 5,
+      backgroundColor: theme.colors.input,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    mixFill: { height: '100%', backgroundColor: theme.colors.primary },
+    mixMeta: { marginTop: 4, color: theme.colors.textMuted, fontSize: theme.fontSize.xs },
   });

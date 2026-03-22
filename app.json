@@ -20,7 +20,11 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f0f1a"
       },
-      "package": "com.bluebalance.app"
+      "package": "com.bluebalance.app",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -39,7 +43,11 @@
     "scheme": "bluebalance",
     "extra": {
       "supabaseUrl": "https://cqfetvdquwqnlevpuikw.supabase.co",
-      "supabaseKey": "sb_publishable_Q-z3VvS22KX2AZKChNXdKw_zn_wyoco"
+      "supabaseKey": "sb_publishable_Q-z3VvS22KX2AZKChNXdKw_zn_wyoco",
+      "router": {},
+      "eas": {
+        "projectId": "b7aeef38-67fa-4c4d-ad86-70220f96d48b"
+      }
     },
     "experiments": {
       "typedRoutes": true
