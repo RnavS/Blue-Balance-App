@@ -1,10 +1,25 @@
-project_id = "risngyykrjzdvyznyfxw"
+project_id = "cqfetvdquwqnlevpuikw"
 
 [functions.generate-tip]
 verify_jwt = false
 
 [functions.ai-coach]
-verify_jwt = false
+verify_jwt = true
 
 [functions.estimate-beverage]
+verify_jwt = false
+
+[functions.create-stripe-checkout-session]
+verify_jwt = true
+
+[functions.create-stripe-portal-session]
+verify_jwt = true
+
+[functions.sync-premium-status]
+verify_jwt = true
+
+[functions.barcode-lookup]
+verify_jwt = true
+
+[functions.stripe-webhook]
 verify_jwt = false

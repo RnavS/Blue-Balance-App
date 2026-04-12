@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import ScreenContainer from '@/components/ui/ScreenContainer';
@@ -34,6 +35,7 @@ const sanitize = (text: string) =>
     .trim();
 
 export default function CoachScreen() {
+  const router = useRouter();
   const {
     currentProfile,
     chatMessages,
@@ -139,6 +141,15 @@ Recent: ${waterLogs.slice(0, 3).map((l) => `${l.amount.toFixed(1)}${unit} ${l.dr
   const handleSend = async (prefill?: string) => {
     const userMsg = (prefill ?? message).trim();
     if (!userMsg || loading) return;
+    if (!isPremium) {
+      Toast.show({
+        type: 'info',
+        text1: 'Premium required',
+        text2: 'Upgrade in Settings to unlock Blue AI Coach.',
+      });
+      router.push('/(main)/settings');
+      return;
+    }
     setMessage('');
     setLoading(true);
     await addChatMessage('user', userMsg);
@@ -156,8 +167,12 @@ Recent: ${waterLogs.slice(0, 3).map((l) => `${l.amount.toFixed(1)}${unit} ${l.dr
 
       if (data?.action) await handleAIAction(data.action);
       await addChatMessage('assistant', response);
-    } catch (_) {
-      await addChatMessage('assistant', "I'm having trouble connecting right now. Please try again.");
+    } catch (error: any) {
+      const messageText =
+        error instanceof Error && error.message
+          ? error.message
+          : "I'm having trouble connecting right now. Please try again.";
+      await addChatMessage('assistant', messageText);
     }
 
     setLoading(false);
@@ -187,7 +202,10 @@ Recent: ${waterLogs.slice(0, 3).map((l) => `${l.amount.toFixed(1)}${unit} ${l.dr
 
         {!isPremium && (
           <SurfaceCard style={styles.freeBanner}>
-            <Text style={styles.freeBannerText}>Blue is active. Premium in Settings adds deeper automation and priority responses.</Text>
+            <Text style={styles.freeBannerText}>Blue AI Coach is a Premium feature. Upgrade in Settings to unlock personalized answers.</Text>
+            <Pressable style={styles.bannerBtn} onPress={() => router.push('/(main)/settings')}>
+              <Text style={styles.bannerBtnText}>View Premium</Text>
+            </Pressable>
           </SurfaceCard>
         )}
 
@@ -202,9 +220,13 @@ Recent: ${waterLogs.slice(0, 3).map((l) => `${l.amount.toFixed(1)}${unit} ${l.dr
                 <Ionicons name="chatbubble-ellipses" size={30} color={theme.colors.primary} />
               </View>
               <Text style={styles.emptyTitle}>Ask anything about your hydration</Text>
-              <Text style={styles.emptySub}>I can suggest goals, pacing, and quick adjustments for your routine.</Text>
+              <Text style={styles.emptySub}>
+                {isPremium
+                  ? 'I can suggest goals, pacing, and quick adjustments for your routine.'
+                  : 'Upgrade to Premium to unlock AI guidance based on your hydration data.'}
+              </Text>
               <View style={styles.suggestionsWrap}>
-                {suggestions.map((s) => (
+                {(isPremium ? suggestions : suggestions.slice(0, 2)).map((s) => (
                   <Pressable key={s} style={styles.suggestionChip} onPress={() => handleSend(s)}>
                     <Text style={styles.suggestionText}>{s}</Text>
                   </Pressable>
@@ -239,8 +261,13 @@ Recent: ${waterLogs.slice(0, 3).map((l) => `${l.amount.toFixed(1)}${unit} ${l.dr
             onSubmitEditing={() => handleSend()}
             returnKeyType="send"
             multiline
+            editable={isPremium}
           />
-          <Pressable style={[styles.sendBtn, (!message.trim() || loading) && { opacity: 0.45 }]} onPress={() => handleSend()} disabled={!message.trim() || loading}>
+          <Pressable
+            style={[styles.sendBtn, (!message.trim() || loading || !isPremium) && { opacity: 0.45 }]}
+            onPress={() => handleSend()}
+            disabled={!message.trim() || loading || !isPremium}
+          >
             <Ionicons name="send" size={16} color={theme.colors.onPrimary} />
           </Pressable>
         </View>
@@ -281,8 +308,20 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       backgroundColor: theme.colors.surfaceAlt,
       borderColor: theme.colors.primarySoft,
       paddingVertical: theme.spacing.sm,
+      gap: theme.spacing.sm,
     },
     freeBannerText: { color: theme.colors.textMuted, fontSize: theme.fontSize.xs, lineHeight: 17 },
+    bannerBtn: {
+      alignSelf: 'flex-start',
+      minWidth: 124,
+      height: 38,
+      borderRadius: theme.radius.md,
+      backgroundColor: theme.colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: theme.spacing.md,
+    },
+    bannerBtnText: { color: theme.colors.onPrimary, fontSize: theme.fontSize.sm, fontWeight: '700' },
     messageList: { paddingBottom: 16, gap: theme.spacing.sm, flexGrow: 1 },
     emptyChat: { alignItems: 'center', gap: theme.spacing.sm, marginTop: theme.spacing.lg },
     botIconLarge: {

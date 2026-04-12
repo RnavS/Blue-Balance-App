@@ -1,10 +1,9 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
+import { errorResponse, HttpError } from "../_shared/http.ts";
+import { createServiceClient, requireAuthenticatedUser } from "../_shared/supabase.ts";
+import { syncPremiumRecordForUser } from "../_shared/stripe.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -12,7 +11,25 @@ serve(async (req) => {
   }
 
   try {
+    const { user } = await requireAuthenticatedUser(req);
+    const serviceSupabase = createServiceClient();
+    const premiumRecord = await syncPremiumRecordForUser(serviceSupabase, user);
+
+    if (!premiumRecord.is_active) {
+      return jsonResponse(
+        {
+          response: "Blue AI Coach is part of Premium. Upgrade in Settings to unlock it.",
+          error: "premium_required",
+        },
+        { status: 402 },
+      );
+    }
+
     const { message, context, history } = await req.json();
+
+    if (!String(message ?? "").trim()) {
+      throw new HttpError(400, "Message is required", { error: "invalid_request" });
+    }
 
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
     const OPENAI_MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini";
@@ -81,12 +98,12 @@ ${context ?? ""}`;
       console.error("OpenAI error:", resp.status, errText);
 
       if (resp.status === 429) {
-        return new Response(
-          JSON.stringify({
+        return jsonResponse(
+          {
             response: "I'm receiving too many requests right now. Please try again in a moment.",
             error: "rate_limited",
-          }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          },
+          { status: 429 },
         );
       }
 
@@ -110,17 +127,9 @@ ${context ?? ""}`;
       }
     }
 
-    return new Response(JSON.stringify({ response: responseText, action }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ response: responseText, action });
   } catch (error) {
     console.error("AI Coach error:", error);
-    return new Response(
-      JSON.stringify({
-        response: "I'm having trouble connecting right now. Please try again!",
-        error: error instanceof Error ? error.message : "Unknown error",
-      }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return errorResponse(error);
   }
 });

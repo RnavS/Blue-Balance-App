@@ -10,6 +10,7 @@ import {
   Modal,
   Switch,
 } from 'react-native';
+import { useRouter } from 'expo-router';
 import { CameraView, Camera, BarcodeScanningResult } from 'expo-camera';
 import Constants from 'expo-constants';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,6 +20,8 @@ import type { BarcodeCapture, BarcodeCaptureSession } from 'scandit-react-native
 import ScreenContainer from '@/components/ui/ScreenContainer';
 import SurfaceCard from '@/components/ui/SurfaceCard';
 import { useProfile } from '@/contexts/ProfileContext';
+import { usePremium } from '@/contexts/PremiumContext';
+import { supabase } from '@/lib/supabase';
 import { useAppTheme } from '@/theme/useAppTheme';
 import { inferBeverageCategory } from '@/utils/beverageCategory';
 
@@ -30,6 +33,11 @@ type BarcodeLookupResult = {
   source: 'saved' | 'lookup';
   lookup_provider?: 'saved' | 'open_food_facts' | 'upcitemdb' | 'go_upc' | 'unknown';
 };
+type BarcodeLookupPayload = {
+  result: BarcodeLookupResult | null;
+  scansUsedThisMonth: number;
+  scansLimitThisMonth: number | null;
+};
 type ScanditCoreModule = typeof import('scandit-react-native-datacapture-core');
 type ScanditBarcodeModule = typeof import('scandit-react-native-datacapture-barcode');
 type ScanditModules = {
@@ -38,11 +46,12 @@ type ScanditModules = {
 };
 
 const BARCODE_CACHE: Record<string, any> = {};
-const GO_UPC_API_KEY = process.env.EXPO_PUBLIC_GO_UPC_API_KEY ?? '';
 const SCANDIT_LICENSE_KEY = process.env.EXPO_PUBLIC_SCANDIT_LICENSE_KEY ?? '';
 
 export default function ScanScreen() {
+  const router = useRouter();
   const { currentProfile, addWaterLog, scannedBeverages, addScannedBeverage, deleteScannedBeverage } = useProfile();
+  const { isPremium, scansUsedThisMonth, scansLimitThisMonth, refreshPremium } = usePremium();
   const [activeView, setActiveView] = useState<ViewMode>('scan');
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
@@ -114,6 +123,10 @@ export default function ScanScreen() {
   const theme = useAppTheme(currentProfile.theme);
   const styles = createStyles(theme);
   const unit = currentProfile.unit_preference;
+  const remainingScans =
+    scansLimitThisMonth === null ? null : Math.max(scansLimitThisMonth - scansUsedThisMonth, 0);
+  const scanLimitReached =
+    !isPremium && scansLimitThisMonth !== null && scansUsedThisMonth >= scansLimitThisMonth;
 
   const parseNumeric = (value: unknown): number | null => {
     if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value;
@@ -257,8 +270,19 @@ export default function ScanScreen() {
     return normalizeVolumeToCurrentUnit(ml);
   };
 
-  const lookupBarcode = async (barcode: string): Promise<BarcodeLookupResult | null> => {
-    if (BARCODE_CACHE[barcode]) return BARCODE_CACHE[barcode];
+  const lookupBarcode = async (barcode: string): Promise<BarcodeLookupPayload> => {
+    const cached = BARCODE_CACHE[barcode];
+    if (cached) {
+      if (typeof cached === 'object' && cached !== null && 'result' in cached) {
+        return cached;
+      }
+
+      return {
+        result: cached,
+        scansUsedThisMonth,
+        scansLimitThisMonth,
+      };
+    }
 
     const saved = scannedBeverages.find((b) => b.barcode === barcode);
     if (saved) {
@@ -269,93 +293,49 @@ export default function ScanScreen() {
         source: 'saved' as const,
         lookup_provider: 'saved' as const,
       };
-      BARCODE_CACHE[barcode] = result;
-      return result;
-    }
-
-    const defaultServing = unit === 'oz' ? 16.9 : 500;
-    let resolvedName: string | null = null;
-    let resolvedServing: number | null = null;
-    let resolvedProvider: BarcodeLookupResult['lookup_provider'] = 'unknown';
-
-    // 1) Open Food Facts (primary)
-    try {
-      const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${barcode}.json`);
-      const data = await res.json();
-      if (data?.status === 1 && data?.product) {
-        const p = data.product;
-        resolvedName = p.product_name || p.generic_name || resolvedName;
-        resolvedServing = extractServingFromOpenFoodFacts(p) ?? resolvedServing;
-        if (resolvedName || resolvedServing) resolvedProvider = 'open_food_facts';
-      }
-    } catch (_) {
-      // Continue fallbacks.
-    }
-
-    // 2) UPCitemdb (fallback)
-    if (!resolvedName || !resolvedServing) {
-      try {
-        const res = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${encodeURIComponent(barcode)}`);
-        if (res.ok) {
-          const data = await res.json();
-          const item = Array.isArray(data?.items) ? data.items[0] : null;
-          if (item) {
-            resolvedName = resolvedName || item.title || item.brand || null;
-            if (!resolvedServing) {
-              resolvedServing = extractVolumeFromCandidateTexts([
-                item.size,
-                item.dimension,
-                item.weight,
-                item.description,
-                item.title,
-              ]);
-            }
-            if (resolvedName || resolvedServing) resolvedProvider = 'upcitemdb';
-          }
-        }
-      } catch (_) {
-        // Continue fallbacks.
-      }
-    }
-
-    // 3) Go-UPC (fallback)
-    if ((!resolvedName || !resolvedServing) && GO_UPC_API_KEY) {
-      try {
-        const res = await fetch(`https://go-upc.com/api/v1/code/${encodeURIComponent(barcode)}?key=${encodeURIComponent(GO_UPC_API_KEY)}`);
-        if (res.ok) {
-          const data = await res.json();
-          const productNode = data?.product ?? data?.item ?? data?.data ?? data;
-          resolvedName = resolvedName || productNode?.name || productNode?.title || productNode?.product_name || null;
-          if (!resolvedServing) {
-            resolvedServing = extractVolumeFromUnknownObject(productNode);
-          }
-          if (resolvedName || resolvedServing) resolvedProvider = 'go_upc';
-        }
-      } catch (_) {
-        // Fall through.
-      }
-    }
-
-    if (resolvedName || resolvedServing) {
-      const safeName = resolvedName || 'Scanned Beverage';
-      const result: BarcodeLookupResult = {
-        name: safeName,
-        serving_size: resolvedServing ?? defaultServing,
-        hydration_factor: safeName.toLowerCase().includes('water') ? 1.0 : 0.9,
-        source: 'lookup',
-        lookup_provider: resolvedProvider,
+      const payload = {
+        result,
+        scansUsedThisMonth,
+        scansLimitThisMonth,
       };
-      BARCODE_CACHE[barcode] = result;
-      return result;
+      BARCODE_CACHE[barcode] = payload;
+      return payload;
     }
 
-    return null;
+    const { data, error } = await supabase.functions.invoke('barcode-lookup', {
+      body: { barcode, unit },
+    });
+
+    if (error) {
+      let details: any = null;
+      const context = (error as any)?.context;
+      if (context && typeof context.json === 'function') {
+        try {
+          details = await context.json();
+        } catch (_) {
+          details = null;
+        }
+      }
+
+      const lookupError = new Error(details?.message || error.message || 'Barcode lookup failed.');
+      (lookupError as any).code = details?.error ?? 'lookup_failed';
+      throw lookupError;
+    }
+
+    const payload: BarcodeLookupPayload = {
+      result: data?.result ?? null,
+      scansUsedThisMonth: Number(data?.scansUsedThisMonth ?? scansUsedThisMonth),
+      scansLimitThisMonth:
+        typeof data?.scansLimitThisMonth === 'number' ? data.scansLimitThisMonth : scansLimitThisMonth,
+    };
+    BARCODE_CACHE[barcode] = payload;
+    return payload;
   };
 
   const handleBarcodeData = async (rawBarcode: string) => {
     const barcode = rawBarcode.trim();
     if (!barcode) return;
-    if (scanLockRef.current || scanned || loading) return;
+    if (scanLockRef.current || scanned || loading || scanLimitReached) return;
 
     const now = Date.now();
     if (lastScanRef.current && lastScanRef.current.barcode === barcode && now - lastScanRef.current.ts < 8000) {
@@ -366,24 +346,48 @@ export default function ScanScreen() {
 
     setScanned(true);
     setLoading(true);
+    let openedPendingScan = false;
 
-    const result = await lookupBarcode(barcode);
+    try {
+      const payload = await lookupBarcode(barcode);
+      const result = payload.result;
 
-    if (result) {
-      setPendingScan({ ...result, barcode });
-      setConfirmName(result.name);
-      setConfirmSize(String(result.serving_size));
-      setRememberBarcode(result.source === 'saved');
-    } else {
-      Toast.show({ type: 'info', text1: 'Product not found', text2: 'Try entering details manually.' });
-    }
+      if (result) {
+        openedPendingScan = true;
+        setPendingScan({ ...result, barcode });
+        setConfirmName(result.name);
+        setConfirmSize(String(result.serving_size));
+        setRememberBarcode(result.source === 'saved');
 
-    setLoading(false);
-    if (!result) {
-      setTimeout(() => {
-        setScanned(false);
-        scanLockRef.current = false;
-      }, 1200);
+        if (!isPremium && result.source === 'lookup') {
+          refreshPremium().catch(() => null);
+        }
+      } else {
+        Toast.show({ type: 'info', text1: 'Product not found', text2: 'Try entering details manually.' });
+      }
+    } catch (error: any) {
+      if (error?.code === 'scan_limit_reached') {
+        refreshPremium().catch(() => null);
+        Toast.show({
+          type: 'info',
+          text1: 'Free scan limit reached',
+          text2: 'Upgrade to Premium in Settings for unlimited barcode lookups.',
+        });
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Lookup failed',
+          text2: error?.message || 'Please try again in a moment.',
+        });
+      }
+    } finally {
+      setLoading(false);
+      if (!openedPendingScan) {
+        setTimeout(() => {
+          setScanned(false);
+          scanLockRef.current = false;
+        }, 1200);
+      }
     }
   };
 
@@ -477,8 +481,27 @@ export default function ScanScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>Scan & Log</Text>
-          <Text style={styles.subtitle}>Scandit scanner with saved product memory and multi-API fallback.</Text>
+          <Text style={styles.subtitle}>Manual logging is always free. Premium unlocks unlimited barcode lookup.</Text>
         </View>
+
+        {!isPremium && (
+          <SurfaceCard style={styles.limitCard}>
+            <View style={styles.limitHeader}>
+              <Ionicons name="scan-outline" size={20} color={theme.colors.primary} />
+              <View style={styles.flex1}>
+                <Text style={styles.limitTitle}>Free barcode lookup</Text>
+                <Text style={styles.limitText}>
+                  {scanLimitReached
+                    ? 'You have used all 5 free barcode lookups this month.'
+                    : `${remainingScans} of 5 barcode lookups remaining this month.`}
+                </Text>
+              </View>
+              <Pressable style={styles.limitBtn} onPress={() => router.push('/(main)/settings')}>
+                <Text style={styles.limitBtnText}>Upgrade</Text>
+              </Pressable>
+            </View>
+          </SurfaceCard>
+        )}
 
         <View style={styles.segmented}>
           {(['scan', 'manual', 'history'] as ViewMode[]).map((v) => (
@@ -507,7 +530,20 @@ export default function ScanScreen() {
               </View>
             )}
 
-            {hasPermission === true && (
+            {hasPermission === true && scanLimitReached && (
+              <View style={styles.centerState}>
+                <Ionicons name="lock-closed-outline" size={42} color={theme.colors.textMuted} />
+                <Text style={styles.emptyTitle}>Monthly free scan limit reached</Text>
+                <Text style={styles.emptyText}>
+                  Manual logging is still available. Upgrade in Settings for unlimited barcode lookup and Premium AI.
+                </Text>
+                <Pressable style={styles.permissionBtn} onPress={() => router.push('/(main)/settings')}>
+                  <Text style={styles.permissionBtnText}>View Premium</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {hasPermission === true && !scanLimitReached && (
               <>
                 {canRenderScanditView && ScanditBarcodeCaptureView ? (
                   <ScanditBarcodeCaptureView
@@ -691,6 +727,24 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
     header: { marginBottom: theme.spacing.md },
     title: { fontSize: theme.fontSize.xxl + 2, fontWeight: '800', color: theme.colors.text, letterSpacing: -0.4 },
     subtitle: { marginTop: theme.spacing.xs, fontSize: theme.fontSize.sm, color: theme.colors.textMuted },
+    limitCard: {
+      marginBottom: theme.spacing.md,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderColor: theme.colors.primarySoft,
+    },
+    limitHeader: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
+    limitTitle: { color: theme.colors.text, fontSize: theme.fontSize.sm, fontWeight: '800' },
+    limitText: { color: theme.colors.textMuted, fontSize: theme.fontSize.xs, lineHeight: 18, marginTop: 2 },
+    limitBtn: {
+      minWidth: 88,
+      height: 36,
+      borderRadius: theme.radius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primary,
+      paddingHorizontal: theme.spacing.sm,
+    },
+    limitBtnText: { color: theme.colors.onPrimary, fontSize: theme.fontSize.sm, fontWeight: '700' },
     segmented: {
       flexDirection: 'row',
       borderWidth: 1,

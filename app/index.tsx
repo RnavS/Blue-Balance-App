@@ -27,7 +27,7 @@ export default function WelcomeScreen() {
 
           <Text style={styles.title}>Blue Balance</Text>
           <Text style={styles.subtitle}>
-            Build better hydration habits with simple tracking, barcode scan, and smart AI coaching.
+            Build better hydration habits with free tracking and barcode logging, then unlock Premium AI coaching when you are ready.
           </Text>
 
           <View style={styles.features}>
@@ -47,7 +47,7 @@ export default function WelcomeScreen() {
               <View style={styles.featureIconWrap}>
                 <Ionicons name="chatbubble-ellipses-outline" size={16} color={theme.colors.primary} />
               </View>
-              <Text style={styles.featureText}>AI coach with personalized advice</Text>
+              <Text style={styles.featureText}>Premium AI coach and unlimited barcode scans</Text>
             </View>
           </View>
 

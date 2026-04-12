@@ -27,4 +27,20 @@ dist-ssr
 
 expo-env.d.ts
 .expo/
+.expo-export*/
 # @end expo-cli
+
+# Build artifacts
+*.apk
+*.aab
+*.ipa
+*.xcarchive
+
+# Environment
+.env
+.env.local
+.env.*.local
+supabase/functions/.env
+
+# Supabase local state
+supabase/.temp/
