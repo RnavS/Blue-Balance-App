@@ -43,7 +43,7 @@ function formEncode(values: Record<string, string | number | boolean | null | un
 async function stripeRequest<T>(
   path: string,
   options: {
-    method?: "GET" | "POST";
+    method?: "GET" | "POST" | "DELETE";
     body?: URLSearchParams;
     query?: Record<string, string | number | undefined>;
   } = {},
@@ -246,6 +246,14 @@ export async function listStripeSubscriptions(customerId: string) {
 
 export async function retrieveStripeSubscription(subscriptionId: string) {
   return await stripeRequest<any>(`/subscriptions/${subscriptionId}`);
+}
+
+export async function cancelStripeSubscription(subscriptionId: string) {
+  return await stripeRequest<any>(`/subscriptions/${subscriptionId}`, { method: "DELETE" });
+}
+
+export async function deleteStripeCustomer(customerId: string) {
+  return await stripeRequest<any>(`/customers/${customerId}`, { method: "DELETE" });
 }
 
 function selectRelevantSubscription(subscriptions: any[]) {

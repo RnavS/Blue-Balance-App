@@ -4,6 +4,7 @@ import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import { errorResponse, HttpError } from "../_shared/http.ts";
 import { createServiceClient, requireAuthenticatedUser } from "../_shared/supabase.ts";
 import { syncPremiumRecordForUser } from "../_shared/stripe.ts";
+import { hasPremiumAccess } from "../_shared/entitlement.ts";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -14,8 +15,9 @@ serve(async (req) => {
     const { user } = await requireAuthenticatedUser(req);
     const serviceSupabase = createServiceClient();
     const premiumRecord = await syncPremiumRecordForUser(serviceSupabase, user);
+    const { message, context, history, platform } = await req.json();
 
-    if (!premiumRecord.is_active) {
+    if (!hasPremiumAccess(premiumRecord.is_active, platform)) {
       return jsonResponse(
         {
           response: "Blue AI Coach is part of Premium. Upgrade in Settings to unlock it.",
@@ -24,8 +26,6 @@ serve(async (req) => {
         { status: 402 },
       );
     }
-
-    const { message, context, history } = await req.json();
 
     if (!String(message ?? "").trim()) {
       throw new HttpError(400, "Message is required", { error: "invalid_request" });

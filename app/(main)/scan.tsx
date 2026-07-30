@@ -9,6 +9,7 @@ import {
   TextInput,
   Modal,
   Switch,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { CameraView, Camera, BarcodeScanningResult } from 'expo-camera';
@@ -21,7 +22,7 @@ import ScreenContainer from '@/components/ui/ScreenContainer';
 import SurfaceCard from '@/components/ui/SurfaceCard';
 import { useProfile } from '@/contexts/ProfileContext';
 import { usePremium } from '@/contexts/PremiumContext';
-import { supabase } from '@/lib/supabase';
+import * as api from '@/lib/api';
 import { useAppTheme } from '@/theme/useAppTheme';
 import { inferBeverageCategory } from '@/utils/beverageCategory';
 
@@ -302,23 +303,15 @@ export default function ScanScreen() {
       return payload;
     }
 
-    const { data, error } = await supabase.functions.invoke('barcode-lookup', {
-      body: { barcode, unit },
-    });
-
-    if (error) {
-      let details: any = null;
-      const context = (error as any)?.context;
-      if (context && typeof context.json === 'function') {
-        try {
-          details = await context.json();
-        } catch (_) {
-          details = null;
-        }
-      }
-
-      const lookupError = new Error(details?.message || error.message || 'Barcode lookup failed.');
-      (lookupError as any).code = details?.error ?? 'lookup_failed';
+    let data: any;
+    try {
+      data = await api.functions.barcodeLookup({ barcode, unit, platform: Platform.OS });
+    } catch (error) {
+      const lookupError = new Error(
+        error instanceof Error ? error.message : 'Barcode lookup failed.',
+      );
+      // The scan-limit path keys off this code to prompt an upgrade.
+      (lookupError as any).code = (error as api.ApiError)?.code ?? 'lookup_failed';
       throw lookupError;
     }
 

@@ -1,10 +1,11 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { AppState, Linking, Platform } from 'react-native';
 import { useAuth } from './AuthContext';
-import { supabase } from '@/lib/supabase';
+import { functions } from '@/lib/api';
 import {
   EMPTY_PREMIUM_STATE,
   normalizePremiumPayload,
+  PREMIUM_FREE_PLATFORM,
   PremiumPackageType,
   PremiumState,
 } from '@/lib/premium';
@@ -14,6 +15,8 @@ interface PremiumContextType extends PremiumState {
   openManageSubscription: () => Promise<void>;
   refreshPremium: () => Promise<void>;
   loading: boolean;
+  /** False on platforms where Premium cannot be sold and is therefore free. */
+  canPurchasePremium: boolean;
 }
 
 const PremiumContext = createContext<PremiumContextType | undefined>(undefined);
@@ -35,33 +38,6 @@ function getReturnUrls() {
   };
 }
 
-async function invokeFunction<T>(name: string, body?: Record<string, unknown>) {
-  const { data, error } = await supabase.functions.invoke(name, body ? { body } : undefined);
-
-  if (error) {
-    const context = (error as any)?.context;
-    if (context && typeof context.json === 'function') {
-      let details: any = null;
-      try {
-        details = await context.json();
-      } catch (_) {
-        details = null;
-      }
-
-      const message =
-        (typeof details?.message === 'string' && details.message) ||
-        (typeof details?.error === 'string' && details.error) ||
-        error.message ||
-        'Request failed.';
-      throw new Error(message);
-    }
-
-    throw new Error(error.message || 'Request failed.');
-  }
-
-  return data as T;
-}
-
 export function PremiumProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [state, setState] = useState<PremiumState>(EMPTY_PREMIUM_STATE);
@@ -76,7 +52,7 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
 
     setLoading(true);
     try {
-      const data = await invokeFunction('sync-premium-status');
+      const data = await functions.syncPremiumStatus();
       setState(normalizePremiumPayload(data));
     } finally {
       setLoading(false);
@@ -119,7 +95,7 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       try {
         const urls = getReturnUrls();
-        const data = await invokeFunction<{ url?: string }>('create-stripe-checkout-session', {
+        const data = await functions.createCheckoutSession({
           packageType,
           platform: Platform.OS,
           ...urls,
@@ -145,9 +121,7 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     try {
       const { returnUrl } = getReturnUrls();
-      const data = await invokeFunction<{ url?: string }>('create-stripe-portal-session', {
-        returnUrl,
-      });
+      const data = await functions.createPortalSession({ returnUrl });
 
       if (!data?.url) {
         throw new Error('Stripe portal URL was not returned.');
@@ -163,6 +137,12 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
     <PremiumContext.Provider
       value={{
         ...state,
+        // On a platform that cannot sell Premium, every gate falls open. This
+        // single override is what unlocks the scan cap and the AI coach in the
+        // UI; the API applies the matching rule server-side.
+        isPremium: state.isPremium || PREMIUM_FREE_PLATFORM,
+        scansLimitThisMonth: PREMIUM_FREE_PLATFORM ? null : state.scansLimitThisMonth,
+        canPurchasePremium: !PREMIUM_FREE_PLATFORM,
         loading,
         purchasePremium,
         openManageSubscription,

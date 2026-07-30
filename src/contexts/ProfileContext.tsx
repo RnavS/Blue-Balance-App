@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from '@/lib/supabase';
+import * as api from '@/lib/api';
 import { useAuth } from './AuthContext';
 import { inferBeverageCategory, normalizeDrinkName } from '@/utils/beverageCategory';
 
@@ -159,13 +159,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
+      const data = await api.profiles.list();
 
       const typedData = (data || []).map(p => ({
         ...p,
@@ -192,13 +186,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     try {
       const historyWindowStart = new Date();
       historyWindowStart.setDate(historyWindowStart.getDate() - 400);
-      const { data, error } = await supabase
-        .from('water_logs')
-        .select('*')
-        .eq('profile_id', currentProfile.id)
-        .gte('logged_at', historyWindowStart.toISOString())
-        .order('logged_at', { ascending: false });
-      if (error) throw error;
+      const data = await api.waterLogs.list(currentProfile.id, historyWindowStart.toISOString());
       setWaterLogs((data || []).map(log => ({
         ...log,
         amount: Number(log.amount),
@@ -214,12 +202,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const fetchBeverages = useCallback(async () => {
     if (!currentProfile) { setBeverages([]); return; }
     try {
-      const { data, error } = await supabase
-        .from('beverages')
-        .select('*')
-        .eq('profile_id', currentProfile.id)
-        .order('created_at', { ascending: true });
-      if (error) throw error;
+      const data = await api.beverages.list(currentProfile.id);
       setBeverages((data || []).map(b => ({
         ...b,
         serving_size: Number(b.serving_size),
@@ -233,12 +216,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const fetchScannedBeverages = useCallback(async () => {
     if (!currentProfile) { setScannedBeverages([]); return; }
     try {
-      const { data, error } = await supabase
-        .from('scanned_beverages')
-        .select('*')
-        .eq('profile_id', currentProfile.id)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
+      const data = await api.scannedBeverages.list(currentProfile.id);
       setScannedBeverages((data || []).map(b => ({
         ...b,
         serving_size: Number(b.serving_size),
@@ -252,13 +230,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const fetchChatMessages = useCallback(async () => {
     if (!currentProfile) { setChatMessages([]); return; }
     try {
-      const { data, error } = await supabase
-        .from('chat_messages')
-        .select('*')
-        .eq('profile_id', currentProfile.id)
-        .order('created_at', { ascending: true })
-        .limit(100);
-      if (error) throw error;
+      const data = await api.chatMessages.list(currentProfile.id);
       setChatMessages((data || []).map(m => ({ ...m, role: m.role as 'user' | 'assistant' })));
     } catch (error) {
       console.error('Error fetching chat messages:', error);
@@ -280,11 +252,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const createProfile = async (profileData: Partial<Profile>): Promise<Profile | null> => {
     if (!user) return null;
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.user) throw new Error('Not signed in');
-
       const insertData = {
-        user_id: session.user.id,
         username: ((profileData.first_name ?? '') + ' ' + (profileData.last_name ?? '')).trim() || 'User',
         first_name: profileData.first_name || null,
         last_name: profileData.last_name || null,
@@ -306,8 +274,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
         vibration_enabled: true,
       };
 
-      const { data, error } = await supabase.from('profiles').insert(insertData).select().single();
-      if (error) throw error;
+      const data = await api.profiles.create(insertData);
 
       const typedProfile = {
         ...data,
@@ -326,8 +293,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const updateProfile = async (updates: Partial<Profile>) => {
     if (!currentProfile) return;
     try {
-      const { error } = await supabase.from('profiles').update(updates).eq('id', currentProfile.id);
-      if (error) throw error;
+      await api.profiles.update(currentProfile.id, updates as Record<string, unknown>);
       const updated = { ...currentProfile, ...updates } as Profile;
       setCurrentProfile(updated);
       setProfiles(prev => prev.map(p => p.id === currentProfile.id ? updated : p));
@@ -338,8 +304,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
   const deleteProfile = async (profileId: string) => {
     try {
-      const { error } = await supabase.from('profiles').delete().eq('id', profileId);
-      if (error) throw error;
+      await api.profiles.remove(profileId);
       setProfiles(prev => prev.filter(p => p.id !== profileId));
       if (currentProfile?.id === profileId) {
         setCurrentProfile(profiles.filter(p => p.id !== profileId)[0] || null);
@@ -398,23 +363,18 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
       }
 
       inFlightAddKeysRef.current.add(dedupeKey);
-      const { data, error } = await supabase
-        .from('water_logs')
-        .insert({
-          profile_id: currentProfile.id,
-          amount: effectiveAmount,
-          raw_amount: safeRawAmount,
-          hydration_factor: safeHydrationFactor,
-          drink_type: normalizedDrink,
-          category,
-          source,
-          barcode,
-          details: details || {},
-          logged_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
-      if (error) throw error;
+      const data = await api.waterLogs.create({
+        profile_id: currentProfile.id,
+        amount: effectiveAmount,
+        raw_amount: safeRawAmount,
+        hydration_factor: safeHydrationFactor,
+        drink_type: normalizedDrink,
+        category,
+        source,
+        barcode,
+        details: details || {},
+        logged_at: new Date().toISOString(),
+      });
       lastAddRef.current = { key: dedupeKey, ts: nowMs };
       setWaterLogs(prev => [{
         ...data,
@@ -432,8 +392,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
   const deleteWaterLog = async (logId: string) => {
     try {
-      const { error } = await supabase.from('water_logs').delete().eq('id', logId);
-      if (error) throw error;
+      await api.waterLogs.remove(logId);
       setWaterLogs(prev => prev.filter(l => l.id !== logId));
     } catch (error) {
       console.error('Error deleting water log:', error);
@@ -583,8 +542,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const addBeverage = async (d: Partial<Beverage>): Promise<Beverage | null> => {
     if (!currentProfile) return null;
     try {
-      const { data, error } = await supabase.from('beverages').insert({ profile_id: currentProfile.id, name: d.name || 'Custom', serving_size: d.serving_size || 8, hydration_factor: d.hydration_factor || 1.0, icon: d.icon || 'droplet', is_default: false }).select().single();
-      if (error) throw error;
+      const data = await api.beverages.create({ profile_id: currentProfile.id, name: d.name || 'Custom', serving_size: d.serving_size || 8, hydration_factor: d.hydration_factor || 1.0, icon: d.icon || 'droplet', is_default: false });
       const b = { ...data, serving_size: Number(data.serving_size), hydration_factor: Number(data.hydration_factor) } as Beverage;
       setBeverages(prev => [...prev, b]);
       return b;
@@ -593,8 +551,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
   const deleteBeverage = async (id: string) => {
     try {
-      const { error } = await supabase.from('beverages').delete().eq('id', id);
-      if (error) throw error;
+      await api.beverages.remove(id);
       setBeverages(prev => prev.filter(b => b.id !== id));
     } catch (e) { console.error(e); }
   };
@@ -602,8 +559,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const addScannedBeverage = async (d: Partial<ScannedBeverage>): Promise<ScannedBeverage | null> => {
     if (!currentProfile) return null;
     try {
-      const { data, error } = await supabase.from('scanned_beverages').insert({ profile_id: currentProfile.id, barcode: d.barcode || '', name: d.name || 'Scanned', serving_size: d.serving_size || 8, hydration_factor: d.hydration_factor || 1.0 }).select().single();
-      if (error) throw error;
+      const data = await api.scannedBeverages.create({ profile_id: currentProfile.id, barcode: d.barcode || '', name: d.name || 'Scanned', serving_size: d.serving_size || 8, hydration_factor: d.hydration_factor || 1.0 });
       const b = { ...data, serving_size: Number(data.serving_size), hydration_factor: Number(data.hydration_factor) } as ScannedBeverage;
       setScannedBeverages(prev => [b, ...prev]);
       return b;
@@ -612,8 +568,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
   const deleteScannedBeverage = async (id: string) => {
     try {
-      const { error } = await supabase.from('scanned_beverages').delete().eq('id', id);
-      if (error) throw error;
+      await api.scannedBeverages.remove(id);
       setScannedBeverages(prev => prev.filter(b => b.id !== id));
     } catch (e) { console.error(e); }
   };
@@ -621,8 +576,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const addChatMessage = async (role: 'user' | 'assistant', content: string): Promise<ChatMessage | null> => {
     if (!currentProfile) return null;
     try {
-      const { data, error } = await supabase.from('chat_messages').insert({ profile_id: currentProfile.id, role, content }).select().single();
-      if (error) throw error;
+      const data = await api.chatMessages.create({ profile_id: currentProfile.id, role, content });
       const m = { ...data, role: data.role as 'user' | 'assistant' } as ChatMessage;
       setChatMessages(prev => [...prev, m]);
       return m;
@@ -632,8 +586,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   const clearChatHistory = async () => {
     if (!currentProfile) return;
     try {
-      const { error } = await supabase.from('chat_messages').delete().eq('profile_id', currentProfile.id);
-      if (error) throw error;
+      await api.chatMessages.clear(currentProfile.id);
       setChatMessages([]);
     } catch (e) { console.error(e); }
   };

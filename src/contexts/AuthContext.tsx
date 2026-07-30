@@ -1,65 +1,72 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { auth, onAuthStateChange, restoreSession, type AuthUser } from '@/lib/api';
 
 interface AuthContextType {
-  user: User | null;
-  session: Session | null;
+  user: AuthUser | null;
   loading: boolean;
   signInWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUpWithEmail: (email: string, password: string) => Promise<{ error: Error | null }>;
   resetPassword: (email: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
-      }
-    );
+    const unsubscribe = onAuthStateChange(setUser);
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    // Restores tokens from storage and validates them against /auth/me.
+    restoreSession()
+      .then(setUser)
+      .finally(() => setLoading(false));
 
-    return () => subscription.unsubscribe();
+    return unsubscribe;
   }, []);
 
   const signInWithEmail = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error as Error | null };
+    try {
+      await auth.signIn(email, password);
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
+    }
   };
 
   const signUpWithEmail = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({ email, password });
-    return { error: error as Error | null };
+    try {
+      await auth.signUp(email, password);
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
+    }
   };
 
   const resetPassword = async (email: string) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
-    return { error: error as Error | null };
+    try {
+      await auth.resetPassword(email);
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
+    }
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setSession(null);
+    await auth.signOut();
+  };
+
+  const deleteAccount = async () => {
+    await auth.deleteAccount();
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signInWithEmail, signUpWithEmail, resetPassword, signOut }}>
+    <AuthContext.Provider
+      value={{ user, loading, signInWithEmail, signUpWithEmail, resetPassword, signOut, deleteAccount }}
+    >
       {children}
     </AuthContext.Provider>
   );

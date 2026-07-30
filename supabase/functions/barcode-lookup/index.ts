@@ -3,6 +3,7 @@ import { corsHeaders, jsonResponse } from "../_shared/cors.ts";
 import { errorResponse, HttpError } from "../_shared/http.ts";
 import { createServiceClient, requireAuthenticatedUser } from "../_shared/supabase.ts";
 import { serializePremiumState, syncPremiumRecordForUser } from "../_shared/stripe.ts";
+import { hasPremiumAccess } from "../_shared/entitlement.ts";
 import {
   BARCODE_LOOKUP_FEATURE_KEY,
   FREE_SCAN_LIMIT,
@@ -119,8 +120,10 @@ function extractVolumeFromUnknownObject(unit: "oz" | "ml", node: unknown): numbe
 
   if (!found.length) return null;
   const realistic = found.filter((entry) => entry >= 120 && entry <= 3000);
-  const ml = realistic.length ? Math.max(...realistic) : Math.max(...found);
-  return normalizeVolumeToUnit(ml, unit);
+  // See extractServingFromOpenFoodFacts: reject case volumes rather than
+  // logging a whole multipack as one drink.
+  if (!realistic.length) return null;
+  return normalizeVolumeToUnit(Math.max(...realistic), unit);
 }
 
 function extractServingFromOpenFoodFacts(product: any, unit: "oz" | "ml"): number | null {
@@ -161,8 +164,11 @@ function extractServingFromOpenFoodFacts(product: any, unit: "oz" | "ml"): numbe
 
   if (!pool.length) return null;
   const realistic = pool.filter((entry) => entry >= 120 && entry <= 3000);
-  const ml = realistic.length ? Math.max(...realistic) : Math.max(...pool);
-  return normalizeVolumeToUnit(ml, unit);
+  // Multipacks report the case volume (e.g. a 12-pack of Diet Coke is "144 fl oz"),
+  // which would otherwise be logged as a single 144 oz drink. When nothing looks
+  // like one container, give up so the caller uses its single-serving default.
+  if (!realistic.length) return null;
+  return normalizeVolumeToUnit(Math.max(...realistic), unit);
 }
 
 async function lookupBarcode(barcode: string, unit: "oz" | "ml"): Promise<LookupResult | null> {
@@ -253,7 +259,7 @@ serve(async (req) => {
     }
 
     const { user } = await requireAuthenticatedUser(req);
-    const { barcode, unit } = await req.json();
+    const { barcode, unit, platform } = await req.json();
     const normalizedBarcode = String(barcode ?? "").trim();
     const normalizedUnit = unit === "ml" ? "ml" : "oz";
 
@@ -271,7 +277,9 @@ serve(async (req) => {
       periodKey,
     );
 
-    if (!premiumRecord.is_active && scansUsedThisMonth >= FREE_SCAN_LIMIT) {
+    const entitled = hasPremiumAccess(premiumRecord.is_active, platform);
+
+    if (!entitled && scansUsedThisMonth >= FREE_SCAN_LIMIT) {
       return jsonResponse(
         {
           ...serializePremiumState(premiumRecord, scansUsedThisMonth),
@@ -285,7 +293,7 @@ serve(async (req) => {
     const result = await lookupBarcode(normalizedBarcode, normalizedUnit);
     let nextCount = scansUsedThisMonth;
 
-    if (!premiumRecord.is_active && result) {
+    if (!entitled && result) {
       nextCount = await incrementUsageCounter(
         serviceSupabase,
         user.id,
@@ -297,7 +305,7 @@ serve(async (req) => {
     return jsonResponse({
       result,
       scansUsedThisMonth: nextCount,
-      scansLimitThisMonth: premiumRecord.is_active ? null : FREE_SCAN_LIMIT,
+      scansLimitThisMonth: entitled ? null : FREE_SCAN_LIMIT,
     });
   } catch (error) {
     console.error("barcode-lookup error:", error);

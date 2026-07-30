@@ -1,4 +1,15 @@
+import { Platform } from 'react-native';
+
 export const FREE_SCAN_LIMIT = 5;
+
+// 1.0 ships without In-App Purchase, so iOS cannot sell Premium at all
+// (App Store Guideline 3.1.1 forbids unlocking in-app features through an
+// external checkout). Until StoreKit lands in 1.1, iOS gets every Premium
+// feature for free and the paywall is hidden entirely.
+//
+// Remove this flag — and the `platform` argument threaded through the
+// barcode-lookup and ai-coach edge functions — when IAP ships.
+export const PREMIUM_FREE_PLATFORM = Platform.OS === 'ios';
 
 export type PremiumPackageType = 'monthly' | 'annual';
 export type PremiumPlatform = 'stripe' | null;

@@ -41,6 +41,9 @@ expo-env.d.ts
 .env.local
 .env.*.local
 supabase/functions/.env
+server/.env
+server/dist/
+server/pgdata/
 
 # Supabase local state
 supabase/.temp/

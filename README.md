@@ -9,7 +9,8 @@ A React Native app built with Expo for tracking daily hydration with barcode sca
 - **assets/** - App icons, splash screens, and images
 - **android/** - Native Android configuration (generated via Expo prebuild)
 - **ios/** - Native iOS configuration (generated via Expo prebuild)
-- **supabase/** - Backend configuration and Edge Functions
+- **server/** - The backend API (Node + Hono + Postgres). See [server/README.md](server/README.md)
+- **supabase/** - Legacy, no longer used. See [supabase/LEGACY.md](supabase/LEGACY.md)
 
 ## Setup
 
@@ -18,14 +19,18 @@ A React Native app built with Expo for tracking daily hydration with barcode sca
    npm install
    ```
 
-2. Set up environment variables in `.env`:
+2. Set up environment variables in `.env` (see `.env.example`):
    ```
-   EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
-   EXPO_PUBLIC_SUPABASE_KEY=your_supabase_key
+   EXPO_PUBLIC_API_URL=http://localhost:8787
    EXPO_PUBLIC_SCANDIT_LICENSE_KEY=your_scandit_key
    ```
 
-3. Run the app:
+3. Start the backend (first time only: `cd server && npm install && npm run db:migrate`):
+   ```bash
+   cd server && npm run dev
+   ```
+
+4. Run the app:
    ```bash
    npm start
    ```
@@ -67,21 +72,28 @@ A React Native app built with Expo for tracking daily hydration with barcode sca
 - **Manual Logging**: Add beverages manually with custom sizes
 - **Daily Tracking**: Visual progress ring and hydration status
 - **Premium AI Coach**: Get personalized hydration coaching
-- **Subscription Management**: Stripe-powered in-app purchases
+- **Subscription Management**: Stripe on web/Android; free on iOS in 1.0 pending In-App Purchase
 - **Dark Mode**: Optimized dark UI with customizable accent colors
 
 ## Publishing Checklist
 
+- [docs/PUBLISHING_ON_MAC.md](docs/PUBLISHING_ON_MAC.md) — step-by-step release walkthrough
+- [docs/APP_STORE_SUBMISSION.md](docs/APP_STORE_SUBMISSION.md) — audit, per-service verification, open blockers
+
+Note: iOS cannot be built on Windows — `expo prebuild --platform ios` refuses to
+run there. Use a Mac.
+
 - [x] Removed legacy App.tsx and utils directory
 - [x] Cleaned up unnecessary permissions (iOS: Face ID, Microphone; Android: READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE, RECORD_AUDIO, SYSTEM_ALERT_WINDOW)
-- [x] Moved Supabase credentials to environment variables
 - [x] Added runtime version configuration
 - [x] Updated .gitignore with build artifacts
 - [x] Added prebuild scripts
+- [x] Added in-app account deletion (App Store Guideline 5.1.1(v))
+- [x] Declared encryption exemption and privacy manifest data types
+- [x] Migrated off Supabase to a self-hosted API
 
 ## Notes
 
-- Supabase credentials are loaded from environment variables, not app.json
+- The app talks to the API in `server/` via `src/lib/api`; there is no vendor SDK
 - The app uses Expo Router for navigation with typed routes
-- Premium subscriptions are managed via Stripe and Supabase Edge Functions
 - Deep links are configured for both iOS and Android

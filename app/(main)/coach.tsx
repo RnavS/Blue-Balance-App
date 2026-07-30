@@ -17,7 +17,7 @@ import ScreenContainer from '@/components/ui/ScreenContainer';
 import SurfaceCard from '@/components/ui/SurfaceCard';
 import { useProfile } from '@/contexts/ProfileContext';
 import { usePremium } from '@/contexts/PremiumContext';
-import { supabase } from '@/lib/supabase';
+import * as api from '@/lib/api';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 const sanitize = (text: string) =>
@@ -156,11 +156,12 @@ Recent: ${waterLogs.slice(0, 3).map((l) => `${l.amount.toFixed(1)}${unit} ${l.dr
 
     try {
       const history = chatMessages.slice(-10).map((m) => ({ role: m.role, content: m.content }));
-      const { data, error } = await supabase.functions.invoke('ai-coach', {
-        body: { message: userMsg, context: buildContext(), history },
+      const data = await api.functions.aiCoach({
+        message: userMsg,
+        context: buildContext(),
+        history,
+        platform: Platform.OS,
       });
-
-      if (error) throw error;
 
       let response = data?.response || "I'm here to help you stay hydrated!";
       response = sanitize(response);

@@ -38,7 +38,7 @@ const DISPLAY_MODES: { id: ThemePreference; label: string }[] = [
 ];
 
 export default function SettingsScreen() {
-  const { signOut } = useAuth();
+  const { signOut, deleteAccount } = useAuth();
   const { currentProfile, updateProfile, profiles, setCurrentProfile } = useProfile();
   const {
     isPremium,
@@ -52,6 +52,7 @@ export default function SettingsScreen() {
     purchasePremium,
     openManageSubscription,
     refreshPremium,
+    canPurchasePremium,
     loading: premiumLoading,
   } = usePremium();
   const { themePreference, setThemePreference } = useThemeMode();
@@ -62,6 +63,7 @@ export default function SettingsScreen() {
   const styles = createStyles(theme);
 
   const [goalInput, setGoalInput] = useState(String(currentProfile.daily_goal ?? ''));
+  const [deletingAccount, setDeletingAccount] = useState(false);
 
   const save = async (updates: any) => {
     await updateProfile(updates);
@@ -73,6 +75,44 @@ export default function SettingsScreen() {
       { text: 'Cancel', style: 'cancel' },
       { text: 'Sign Out', style: 'destructive', onPress: signOut },
     ]);
+  };
+
+  // Two-step confirmation: App Review expects deletion to be reachable in-app,
+  // but not so easy that it can be triggered by a stray tap.
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This permanently deletes your account and all hydration data. Any active subscription is cancelled. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert('Are you sure?', 'This is your last chance to keep your data.', [
+              { text: 'Keep My Account', style: 'cancel' },
+              {
+                text: 'Delete Forever',
+                style: 'destructive',
+                onPress: async () => {
+                  setDeletingAccount(true);
+                  try {
+                    await deleteAccount();
+                    Toast.show({ type: 'success', text1: 'Account deleted' });
+                  } catch (error) {
+                    Alert.alert(
+                      'Delete Account',
+                      error instanceof Error ? error.message : 'Unable to delete your account.',
+                    );
+                  } finally {
+                    setDeletingAccount(false);
+                  }
+                },
+              },
+            ]),
+        },
+      ],
+    );
   };
 
   const handlePurchase = async (packageType: 'monthly' | 'annual') => {
@@ -205,6 +245,23 @@ export default function SettingsScreen() {
         </Row>
       </Section>
 
+      {!canPurchasePremium ? (
+        // No purchase path exists on this platform in 1.0, so there is nothing to
+        // sell or manage — just tell the user what they have.
+        <Section title="Features" theme={theme}>
+          <View style={[styles.premiumCard, styles.premiumCardActive]}>
+            <View style={styles.premiumHeader}>
+              <Ionicons name="star" size={22} color="#f59e0b" />
+              <View style={styles.flex1}>
+                <Text style={styles.premiumTitle}>All features included</Text>
+                <Text style={styles.premiumSub}>
+                  Unlimited barcode scans and Blue AI Coach are unlocked at no cost.
+                </Text>
+              </View>
+            </View>
+          </View>
+        </Section>
+      ) : (
       <Section title="Premium" theme={theme}>
         <View style={[styles.premiumCard, isPremium && styles.premiumCardActive]}>
           <View style={styles.premiumHeader}>
@@ -298,12 +355,28 @@ export default function SettingsScreen() {
           )}
         </View>
       </Section>
+      )}
 
       <Section title="Account" theme={theme}>
         <Pressable style={styles.dangerRow} onPress={handleSignOut}>
           <Ionicons name="log-out-outline" size={18} color={theme.colors.danger} />
           <Text style={styles.dangerText}>Sign Out</Text>
         </Pressable>
+        <Pressable
+          style={styles.dangerRow}
+          onPress={handleDeleteAccount}
+          disabled={deletingAccount}
+        >
+          <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+          <Text style={styles.dangerText}>
+            {deletingAccount ? 'Deleting Account…' : 'Delete Account'}
+          </Text>
+        </Pressable>
+        <Text style={styles.dangerHint}>
+          Deleting your account permanently removes your profiles, hydration history, saved
+          beverages, and coach conversations. Any active subscription is cancelled. This cannot be
+          undone.
+        </Text>
       </Section>
 
       <View style={styles.bottomSpacer} />
@@ -485,6 +558,7 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
     freeTierText: { color: theme.colors.textMuted, fontSize: theme.fontSize.sm, lineHeight: 19 },
     dangerRow: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm, paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.md },
     dangerText: { color: theme.colors.danger, fontSize: theme.fontSize.base, fontWeight: '700' },
+    dangerHint: { color: theme.colors.textMuted, fontSize: theme.fontSize.sm, lineHeight: 18, paddingHorizontal: theme.spacing.md, paddingBottom: theme.spacing.md },
     flex1: { flex: 1 },
     bottomSpacer: { height: 40 },
   });
