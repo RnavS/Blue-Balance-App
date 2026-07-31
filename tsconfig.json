@@ -19,6 +19,9 @@
   ],
   "exclude": [
     "supabase/**",
+    "server/**",
+    "scripts/**",
+    "dist/**",
     "node_modules"
   ]
 }

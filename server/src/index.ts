@@ -4,7 +4,7 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { requireUser, type AppEnv } from './auth/middleware.js';
 import { config } from './config.js';
-import { pool } from './db/client.js';
+import { pool, waitForDatabase } from './db/client.js';
 import { ensureSchema } from './db/ensure-schema.js';
 import { errorResponse } from './lib/errors.js';
 import { accountRoutes } from './routes/account.js';
@@ -74,6 +74,24 @@ app.route('/account', accountRoutes);
 // The smoke test imports `app` to drive routes through app.fetch() directly, so
 // only bind a port when this module is the process entrypoint.
 if (!process.env.BLUE_BALANCE_NO_LISTEN) {
+  // A rejected promise or a thrown error with no handler terminates Node. Log
+  // loudly and keep serving: one bad request should not take down every other
+  // user's session.
+  process.on('unhandledRejection', (reason) => {
+    console.error('[fatal] Unhandled promise rejection:', reason);
+  });
+
+  process.on('uncaughtException', (error) => {
+    console.error('[fatal] Uncaught exception:', error);
+  });
+
+  // The database is usually not accepting connections yet on a fresh deploy.
+  // Wait for it rather than exiting into a crash loop.
+  await waitForDatabase().catch((error) => {
+    console.error('[db] Database never became reachable:', error);
+    process.exit(1);
+  });
+
   // Bring the schema up to date before accepting traffic, so a fresh clone needs
   // no migrate step. A failure here is fatal: serving against a missing or stale
   // schema would produce confusing 500s on every request.

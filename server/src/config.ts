@@ -108,6 +108,11 @@ export const config = {
 
   goUpcApiKey: optional('GO_UPC_API_KEY'),
 
+  // Password reset cannot deliver anything without these; the endpoint refuses
+  // rather than reporting a success it did not achieve.
+  resendApiKey: optional('RESEND_API_KEY'),
+  emailFrom: optional('EMAIL_FROM'),
+
   /** Set to "false" to re-enable the paywall on iOS. See docs/APP_STORE_SUBMISSION.md. */
   iosPremiumFree: optional('IOS_PREMIUM_FREE', 'true'),
 } as const;

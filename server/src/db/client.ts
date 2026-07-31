@@ -37,9 +37,46 @@ const nodePool = embedded
       connectionString: config.databaseUrl,
       ssl: needsSsl ? { rejectUnauthorized: false } : undefined,
       max: Number(process.env.DATABASE_POOL_MAX ?? 10),
+      // Managed Postgres drops idle connections; recycle before it does.
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 10_000,
     });
 
+// A pg Pool emits 'error' when an *idle* client dies — a routine event on hosted
+// Postgres. EventEmitter throws on an unhandled 'error', which would take the
+// whole process down. The pool discards the bad client and carries on, so this
+// only needs to be logged.
+nodePool?.on('error', (error) => {
+  console.error('[db] Idle client error (pool will recover):', error.message);
+});
+
 export const db = embedded ? embedded.db : drizzle(nodePool!, { schema });
+
+/**
+ * Blocks until the database accepts a query, retrying with backoff.
+ *
+ * On a fresh deploy the app container usually starts before Postgres is ready to
+ * accept connections. Without this the first query throws, the process exits, and
+ * the host restarts it in a crash loop that looks like a broken deploy.
+ */
+export async function waitForDatabase(attempts = 10): Promise<void> {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await pool.query('SELECT 1');
+      if (attempt > 1) console.log(`[db] Connected after ${attempt} attempts.`);
+      return;
+    } catch (error) {
+      if (attempt === attempts) throw error;
+
+      const delayMs = Math.min(1000 * 2 ** (attempt - 1), 10_000);
+      console.warn(
+        `[db] Not ready (attempt ${attempt}/${attempts}), retrying in ${delayMs}ms:`,
+        error instanceof Error ? error.message : error,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
 
 /** Driver-agnostic helpers so callers do not branch on which one is active. */
 export const pool = {

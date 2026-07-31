@@ -121,6 +121,19 @@ function toApiError(status: number, body: any) {
   return new ApiError(status, message, code, body);
 }
 
+/**
+ * A request that never returns is worse than one that fails: the UI spins
+ * forever with no way out. React Native's fetch has no default timeout, so this
+ * imposes one.
+ *
+ * Generous because a host that sleeps when idle (most free tiers) can take
+ * ~30 seconds to answer the first request after waking.
+ */
+const REQUEST_TIMEOUT_MS = 45_000;
+
+/** Transport-level failure — no HTTP response at all. */
+const NETWORK_ERROR = 'network_error';
+
 async function rawRequest(path: string, init: RequestInit, withAuth: boolean) {
   if (!API_URL) {
     throw new ApiError(
@@ -138,7 +151,23 @@ async function rawRequest(path: string, init: RequestInit, withAuth: boolean) {
     headers.set('Authorization', `Bearer ${accessToken}`);
   }
 
-  return await fetch(`${API_URL}${path}`, { ...init, headers });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(`${API_URL}${path}`, { ...init, headers, signal: controller.signal });
+  } catch (error) {
+    const aborted = error instanceof Error && error.name === 'AbortError';
+    throw new ApiError(
+      0,
+      aborted
+        ? 'The server took too long to respond. Check your connection and try again.'
+        : 'Could not reach the server. Check your connection and try again.',
+      NETWORK_ERROR,
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /** Rotates the refresh token. Returns false when the session is unrecoverable. */
@@ -175,6 +204,13 @@ async function refreshSession(): Promise<boolean> {
   return refreshInFlight;
 }
 
+/** 502/503/504 are what a proxy returns while its backend is still waking up. */
+const TRANSIENT_STATUSES = new Set([502, 503, 504]);
+
+const MAX_ATTEMPTS = 3;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function apiFetch<T = any>(
   path: string,
   init: RequestInit = {},
@@ -182,26 +218,58 @@ export async function apiFetch<T = any>(
 ): Promise<T> {
   const { auth = true, retry = true } = options;
 
-  let response = await rawRequest(path, init, auth);
+  let lastTransientError: ApiError | null = null;
 
-  // One transparent refresh-and-retry on expiry.
-  if (response.status === 401 && auth && retry && refreshToken) {
-    const refreshed = await refreshSession();
-    if (refreshed) {
-      response = await rawRequest(path, init, true);
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    let response: Response;
+
+    try {
+      response = await rawRequest(path, init, auth);
+    } catch (error) {
+      // No response at all. Worth another try — a dropped connection or a host
+      // that is still booting usually succeeds moments later.
+      if (error instanceof ApiError && error.code === NETWORK_ERROR && attempt < MAX_ATTEMPTS) {
+        lastTransientError = error;
+        await sleep(attempt * 1000);
+        continue;
+      }
+      throw error;
     }
+
+    // One transparent refresh-and-retry on expiry.
+    if (response.status === 401 && auth && retry && refreshToken) {
+      const refreshed = await refreshSession();
+      if (refreshed) {
+        response = await rawRequest(path, init, true);
+      }
+    }
+
+    if (TRANSIENT_STATUSES.has(response.status) && attempt < MAX_ATTEMPTS) {
+      lastTransientError = new ApiError(
+        response.status,
+        'The server is starting up. Retrying...',
+        'server_unavailable',
+      );
+      await sleep(attempt * 1000);
+      continue;
+    }
+
+    const body = await parseBody(response);
+
+    if (!response.ok) {
+      if (response.status === 401 && auth) {
+        await clearSession();
+      }
+      throw toApiError(response.status, body);
+    }
+
+    return body as T;
   }
 
-  const body = await parseBody(response);
-
-  if (!response.ok) {
-    if (response.status === 401 && auth) {
-      await clearSession();
-    }
-    throw toApiError(response.status, body);
-  }
-
-  return body as T;
+  throw (
+    lastTransientError ??
+    new ApiError(0, 'Could not reach the server. Check your connection and try again.', NETWORK_ERROR)
+  );
 }
 
 /**
@@ -228,11 +296,79 @@ export async function restoreSession(): Promise<AuthUser | null> {
     notify();
     return currentUser;
   } catch (error) {
-    // Offline: keep the stored tokens so the app recovers when connectivity
-    // returns. Only an actual auth rejection clears them (handled in apiFetch).
-    if (error instanceof ApiError && error.status === 0) {
+    // The server rejected the token — apiFetch has already cleared the session.
+    if (error instanceof ApiError && error.status === 401) {
       return null;
     }
+
+    // Unreachable server (offline, or a host still waking up). Trust the stored
+    // token for identity so the user is not thrown back to the login screen for
+    // something that is not their fault. This grants no access: every real
+    // request still carries the token and the server still verifies it.
+    const claims = decodeTokenClaims(storedAccess);
+    if (claims) {
+      currentUser = claims;
+      notify();
+      return currentUser;
+    }
+
     return null;
   }
+}
+
+/**
+ * Reads the `sub` and `email` out of a JWT payload **without verifying it**.
+ *
+ * Only ever used to label the UI while the server is unreachable. Nothing is
+ * authorised on the strength of this — the server verifies the signature on
+ * every request, so a forged token gets a 401 the moment connectivity returns.
+ */
+function decodeTokenClaims(token: string): AuthUser | null {
+  try {
+    const payload = token.split('.')[1];
+    if (!payload) return null;
+
+    const claims = JSON.parse(base64UrlToUtf8(payload));
+    if (typeof claims?.sub !== 'string') return null;
+
+    // An expired token will be refreshed or rejected on the next live request.
+    return { id: claims.sub, email: typeof claims.email === 'string' ? claims.email : '' };
+  } catch {
+    return null;
+  }
+}
+
+const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/**
+ * Decodes base64url to a UTF-8 string.
+ *
+ * Written out rather than calling `atob` because Hermes does not reliably
+ * provide it, and a missing global here would fail silently. Bytes are handed to
+ * decodeURIComponent so multi-byte characters survive.
+ */
+function base64UrlToUtf8(input: string): string {
+  const base64 = input.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+  const bytes: number[] = [];
+
+  for (let i = 0; i < padded.length; i += 4) {
+    const c0 = BASE64_ALPHABET.indexOf(padded[i]!);
+    const c1 = BASE64_ALPHABET.indexOf(padded[i + 1]!);
+    const c2 = BASE64_ALPHABET.indexOf(padded[i + 2]!);
+    const c3 = BASE64_ALPHABET.indexOf(padded[i + 3]!);
+
+    if (c0 < 0 || c1 < 0) break;
+
+    bytes.push((c0 << 2) | (c1 >> 4));
+    // indexOf returns -1 for the '=' padding, marking the end of real data.
+    if (c2 >= 0) bytes.push(((c1 & 15) << 4) | (c2 >> 2));
+    if (c3 >= 0) bytes.push(((c2 & 3) << 6) | c3);
+  }
+
+  const percentEncoded = bytes
+    .map((byte) => `%${byte.toString(16).padStart(2, '0')}`)
+    .join('');
+
+  return decodeURIComponent(percentEncoded);
 }

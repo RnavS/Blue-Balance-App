@@ -57,3 +57,10 @@ services:
       # Optional third barcode provider. The first two need no key.
       - key: GO_UPC_API_KEY
         sync: false
+
+      # Password reset cannot deliver without these, and says so rather than
+      # pretending it sent something. Free tier at resend.com.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false

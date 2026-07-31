@@ -5,6 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import Toast from 'react-native-toast-message';
+import ErrorBoundary from '@/components/ErrorBoundary';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { PremiumProvider } from '@/contexts/PremiumContext';
 import { ProfileProvider, useProfile } from '@/contexts/ProfileContext';
@@ -62,7 +63,12 @@ export default function RootLayout() {
         <ThemeModeProvider>
           <QueryClientProvider client={queryClient}>
             <StatusBar style="auto" />
-            <Providers />
+            {/* Wraps the app tree, not the whole root: Toast stays mounted so a
+                caught error can still surface feedback, and the boundary keeps
+                a crash from blanking the screen with no way back. */}
+            <ErrorBoundary>
+              <Providers />
+            </ErrorBoundary>
             <Toast />
           </QueryClientProvider>
         </ThemeModeProvider>

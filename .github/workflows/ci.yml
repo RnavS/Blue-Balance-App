@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A newer push makes an in-flight run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: App typecheck and bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Catches broken imports and anything else that only shows up when Metro
+      # actually resolves the module graph — typecheck alone misses those.
+      - name: Bundle for iOS
+        run: npx expo export --platform ios --output-dir /tmp/expo-export
+        env:
+          EXPO_PUBLIC_API_URL: https://ci.example.com
+
+  server:
+    name: Server typecheck, build and smoke test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # The Dockerfile runs the compiled output, so a build failure here is a
+      # deploy failure.
+      - name: Build
+        run: npm run build
+
+      # Runs against Postgres compiled to WebAssembly — no service container.
+      - name: Smoke test
+        run: npm run smoke
+
+  docker:
+    name: Docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      # The deploy path. Building it here means a broken Dockerfile surfaces on
+      # push rather than during a deploy.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./server
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
