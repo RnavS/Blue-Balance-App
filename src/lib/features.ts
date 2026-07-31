@@ -23,3 +23,27 @@
  * and already works. It is only the on-device scanner that is gated.
  */
 export const BARCODE_SCANNING_ENABLED = false;
+
+/**
+ * Blue, the AI coach.
+ *
+ * Needs an AI provider configured on the server (`AI_BASE_URL`, `AI_API_KEY`,
+ * `AI_MODEL` in `server/.env`). While this is false the Coach tab shows a
+ * "Coming soon" card and never calls the API, so a missing or misbehaving
+ * provider cannot surface as an error to users.
+ *
+ * To turn it on: get the server answering, confirm its startup log reads
+ * `AI coach: configured`, then set this to `true`.
+ */
+export const AI_COACH_ENABLED = false;
+
+/**
+ * Whether there is anything to sell.
+ *
+ * Premium's entire value is unlimited scans plus the coach. With both gated
+ * there is nothing behind the paywall, so it must not be shown — charging for
+ * two "coming soon" features would be indefensible, and on iOS it would also
+ * put an unusable purchase in front of App Review.
+ */
+export const PREMIUM_HAS_ANYTHING_TO_SELL =
+  BARCODE_SCANNING_ENABLED || AI_COACH_ENABLED;

@@ -18,6 +18,7 @@ import SurfaceCard from '@/components/ui/SurfaceCard';
 import { useProfile } from '@/contexts/ProfileContext';
 import { usePremium } from '@/contexts/PremiumContext';
 import * as api from '@/lib/api';
+import { AI_COACH_ENABLED } from '@/lib/features';
 import { useAppTheme } from '@/theme/useAppTheme';
 
 const sanitize = (text: string) =>
@@ -201,7 +202,24 @@ Recent: ${waterLogs.slice(0, 3).map((l) => `${l.amount.toFixed(1)}${unit} ${l.dr
           )}
         </View>
 
-        {!isPremium && (
+        {!AI_COACH_ENABLED && (
+          <View style={styles.comingSoon}>
+            <Ionicons name="sparkles-outline" size={42} color={theme.colors.primary} />
+            <Text style={styles.comingSoonTitle}>Blue is coming soon</Text>
+            <Text style={styles.comingSoonText}>
+              Your personal hydration coach is nearly ready. Everything else in the app works
+              today — keep logging and your history will be here waiting when Blue arrives.
+            </Text>
+            <Pressable
+              style={styles.bannerBtn}
+              onPress={() => router.push('/(main)/dashboard')}
+            >
+              <Text style={styles.bannerBtnText}>Back to Dashboard</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {AI_COACH_ENABLED && !isPremium && (
           <SurfaceCard style={styles.freeBanner}>
             <Text style={styles.freeBannerText}>Blue AI Coach is a Premium feature. Upgrade in Settings to unlock personalized answers.</Text>
             <Pressable style={styles.bannerBtn} onPress={() => router.push('/(main)/settings')}>
@@ -210,6 +228,7 @@ Recent: ${waterLogs.slice(0, 3).map((l) => `${l.amount.toFixed(1)}${unit} ${l.dr
           </SurfaceCard>
         )}
 
+        {AI_COACH_ENABLED && (
         <FlatList
           ref={listRef}
           data={chatMessages}
@@ -251,7 +270,9 @@ Recent: ${waterLogs.slice(0, 3).map((l) => `${l.amount.toFixed(1)}${unit} ${l.dr
             ) : null
           }
         />
+        )}
 
+        {AI_COACH_ENABLED && (
         <View style={styles.inputBar}>
           <TextInput
             style={styles.textInput}
@@ -272,6 +293,7 @@ Recent: ${waterLogs.slice(0, 3).map((l) => `${l.amount.toFixed(1)}${unit} ${l.dr
             <Ionicons name="send" size={16} color={theme.colors.onPrimary} />
           </Pressable>
         </View>
+        )}
       </KeyboardAvoidingView>
     </ScreenContainer>
   );
@@ -303,6 +325,27 @@ const createStyles = (theme: ReturnType<typeof useAppTheme>) =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surface,
+    },
+    comingSoon: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: theme.spacing.xl,
+      gap: theme.spacing.sm,
+    },
+    comingSoonTitle: {
+      color: theme.colors.text,
+      fontSize: theme.fontSize.lg,
+      fontWeight: '700',
+      marginTop: theme.spacing.sm,
+      textAlign: 'center',
+    },
+    comingSoonText: {
+      color: theme.colors.textMuted,
+      fontSize: theme.fontSize.sm,
+      lineHeight: 20,
+      textAlign: 'center',
+      marginBottom: theme.spacing.sm,
     },
     freeBanner: {
       marginBottom: theme.spacing.sm,

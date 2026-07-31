@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Toast from 'react-native-toast-message';
 import ScreenContainer from '@/components/ui/ScreenContainer';
 import { useAuth } from '@/contexts/AuthContext';
+import { PREMIUM_HAS_ANYTHING_TO_SELL } from '@/lib/features';
 import { useProfile } from '@/contexts/ProfileContext';
 import { usePremium } from '@/contexts/PremiumContext';
 import { useAppTheme } from '@/theme/useAppTheme';
@@ -253,9 +254,13 @@ export default function SettingsScreen() {
             <View style={styles.premiumHeader}>
               <Ionicons name="star" size={22} color="#f59e0b" />
               <View style={styles.flex1}>
-                <Text style={styles.premiumTitle}>All features included</Text>
+                <Text style={styles.premiumTitle}>
+                  {PREMIUM_HAS_ANYTHING_TO_SELL ? 'All features included' : 'Everything is free'}
+                </Text>
                 <Text style={styles.premiumSub}>
-                  Unlimited barcode scans and Blue AI Coach are unlocked at no cost.
+                  {PREMIUM_HAS_ANYTHING_TO_SELL
+                    ? 'Unlimited barcode scans and Blue AI Coach are unlocked at no cost.'
+                    : 'Every feature in the app is free. Barcode scanning and Blue, your AI coach, are on the way — no charge when they land.'}
                 </Text>
               </View>
             </View>

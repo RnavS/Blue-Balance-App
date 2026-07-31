@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 import { AppState, Linking, Platform } from 'react-native';
 import { useAuth } from './AuthContext';
 import { functions } from '@/lib/api';
+import { PREMIUM_HAS_ANYTHING_TO_SELL } from '@/lib/features';
 import {
   EMPTY_PREMIUM_STATE,
   normalizePremiumPayload,
@@ -142,7 +143,9 @@ export function PremiumProvider({ children }: { children: React.ReactNode }) {
         // UI; the API applies the matching rule server-side.
         isPremium: state.isPremium || PREMIUM_FREE_PLATFORM,
         scansLimitThisMonth: PREMIUM_FREE_PLATFORM ? null : state.scansLimitThisMonth,
-        canPurchasePremium: !PREMIUM_FREE_PLATFORM,
+        // Also false when both paid features are gated behind "coming soon" —
+        // there would be nothing behind the paywall to buy.
+        canPurchasePremium: !PREMIUM_FREE_PLATFORM && PREMIUM_HAS_ANYTHING_TO_SELL,
         loading,
         purchasePremium,
         openManageSubscription,
