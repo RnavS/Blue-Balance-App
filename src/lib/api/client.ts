@@ -7,6 +7,17 @@ const API_URL = (
   ''
 ).replace(/\/$/, '');
 
+// EXPO_PUBLIC_* is inlined at bundle time, so a missing .env produces an app that
+// builds fine and then fails on every screen. Say so once, loudly, at startup
+// rather than only as a per-request error.
+if (!API_URL) {
+  console.error(
+    '[Blue Balance] EXPO_PUBLIC_API_URL is not set. Copy .env.example to .env, ' +
+      'point it at your API, then restart the bundler with `npm run start:clear`. ' +
+      'Every network request will fail until this is set.',
+  );
+}
+
 const ACCESS_TOKEN_KEY = 'blueBalance_accessToken';
 const REFRESH_TOKEN_KEY = 'blueBalance_refreshToken';
 
@@ -112,7 +123,11 @@ function toApiError(status: number, body: any) {
 
 async function rawRequest(path: string, init: RequestInit, withAuth: boolean) {
   if (!API_URL) {
-    throw new ApiError(0, 'EXPO_PUBLIC_API_URL is not configured.', 'api_not_configured');
+    throw new ApiError(
+      0,
+      'The app is not configured to reach a server. Set EXPO_PUBLIC_API_URL in .env and restart the bundler.',
+      'api_not_configured',
+    );
   }
 
   const headers = new Headers(init.headers);

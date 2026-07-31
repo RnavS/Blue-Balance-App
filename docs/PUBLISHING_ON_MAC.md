@@ -24,6 +24,64 @@ npm install
 
 ---
 
+---
+
+## Step 0.5 — Running the dev build (read this if the app shows "No development servers found")
+
+A **development build** (what `npx expo run:ios` produces) contains no JavaScript.
+It downloads the JS from a Metro bundler at launch. With no bundler running it
+scans ports 8081–8085 and 19000–19002, gets connection-refused on every one, and
+shows the "No development servers found" screen. That is not a crash — nothing is
+broken, the app simply has nothing to load.
+
+Three things must be running, in this order:
+
+```bash
+# 1. the backend  (terminal 1)
+cd server && npm run dev          # → http://localhost:8787
+
+# 2. the bundler  (terminal 2, from the repo root)
+npm run start                     # → Metro on http://localhost:8081
+```
+
+3. Then launch the app. It should find Metro automatically; if not, tap
+   **Enter URL manually** and type `http://localhost:8081`.
+
+**The simulator resolves `localhost` to the Mac**, so `http://localhost:8787`
+works there. On a **physical device** it does not — the phone's own localhost has
+nothing on it. Use your Mac's LAN IP instead:
+
+```bash
+ipconfig getifaddr en0            # e.g. 192.168.1.42
+```
+
+Set `EXPO_PUBLIC_API_URL=http://192.168.1.42:8787` in `.env`, run
+`npm run start:lan`, and keep both devices on the same Wi-Fi.
+
+### `.env` is gitignored, so a fresh clone has none
+
+`EXPO_PUBLIC_*` values are inlined **at bundle time**, not read at runtime. Without
+`.env` the app builds and launches normally and then fails on every screen. Create
+it before the first run:
+
+```bash
+cp .env.example .env
+```
+
+The app logs a loud `[Blue Balance] EXPO_PUBLIC_API_URL is not set` error at
+startup if you forget. **After editing `.env`, restart the bundler with
+`npm run start:clear`** — a running Metro will keep serving the old inlined value.
+
+### Plain HTTP on a physical device
+
+`Info.plist` sets `NSAllowsArbitraryLoads: false`. Loopback is exempt, so the
+simulator is fine, but App Transport Security may block plain `http://` to a LAN
+IP from a real device. If requests fail there with no server-side log, that is the
+cause — deploy the backend behind HTTPS (step 1) and point the device at that
+rather than adding a permanent ATS exception.
+
+---
+
 ## Step 1 — Deploy the backend first
 
 Nothing in the app works without it: every authenticated screen calls the API on

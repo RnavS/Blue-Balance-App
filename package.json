@@ -4,7 +4,9 @@
   "main": "expo-router/entry",
   "private": true,
   "scripts": {
-    "start": "expo start",
+    "start": "expo start --dev-client",
+    "start:clear": "expo start --dev-client -c",
+    "start:lan": "expo start --dev-client --lan",
     "start:go": "expo start --go --lan -c",
     "start:go:tunnel": "expo start --go --tunnel -c",
     "android": "expo run:android",
