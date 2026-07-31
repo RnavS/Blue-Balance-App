@@ -22,6 +22,49 @@ import {
 
 export const functionRoutes = new Hono<AppEnv>();
 
+/**
+ * Pulls the assistant's text out of a chat-completions response.
+ *
+ * Handles both shapes so the coach does not depend on a provider honouring
+ * `stream: false`: the ordinary single JSON object, and a server-sent-event
+ * stream of `data:` chunks whose `delta.content` fragments concatenate into the
+ * same message.
+ */
+function extractContent(body: string): string {
+  const trimmed = body.trim();
+  if (!trimmed) return '';
+
+  if (!trimmed.startsWith('data:')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return parsed?.choices?.[0]?.message?.content ?? '';
+    } catch {
+      return '';
+    }
+  }
+
+  let text = '';
+
+  for (const line of trimmed.split('\n')) {
+    const entry = line.trim();
+    if (!entry.startsWith('data:')) continue;
+
+    const payload = entry.slice(5).trim();
+    if (!payload || payload === '[DONE]') continue;
+
+    try {
+      const chunk = JSON.parse(payload);
+      const choice = chunk?.choices?.[0];
+      // delta on a stream; message when a server mixes the two.
+      text += choice?.delta?.content ?? choice?.message?.content ?? '';
+    } catch {
+      // A truncated chunk should not discard everything already collected.
+    }
+  }
+
+  return text;
+}
+
 /** Replaces the sync-premium-status edge function. */
 functionRoutes.post('/sync-premium-status', async (c) => {
   const user = c.get('user');
@@ -160,7 +203,9 @@ ${body?.context ?? ''}`;
       Authorization: `Bearer ${config.aiApiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ model: config.aiModel, messages, temperature: 0.7 }),
+    // Explicitly non-streaming. Some OpenAI-compatible servers stream by
+    // default, which yields SSE chunks that response.json() cannot parse.
+    body: JSON.stringify({ model: config.aiModel, messages, temperature: 0.7, stream: false }),
   });
 
   if (!response.ok) {
@@ -169,8 +214,7 @@ ${body?.context ?? ''}`;
     throw new HttpError(502, 'The coach is unavailable right now.', { error: 'ai_request_failed' });
   }
 
-  const data: any = await response.json();
-  const raw: string = data?.choices?.[0]?.message?.content ?? '';
+  const raw = extractContent(await response.text());
 
   // The model appends an action as trailing JSON; split it off before display.
   let action: unknown = null;
