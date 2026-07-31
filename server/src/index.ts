@@ -120,8 +120,20 @@ if (!process.env.BLUE_BALANCE_NO_LISTEN) {
   // server over the LAN.
   serve({ fetch: app.fetch, port: config.port, hostname: '0.0.0.0' }, (info) => {
     console.log(`Blue Balance API listening on port ${info.port}`);
-    if (!config.isProduction) {
-      console.log('  Point the app at it with EXPO_PUBLIC_API_URL in the repo-root .env');
+
+    // Optional integrations fail at the moment they are used, which makes it
+    // look like the provider is broken when the key simply is not loaded.
+    // State it at boot instead, so the answer is visible before anyone asks.
+    const status = (on: boolean) => (on ? 'configured' : 'NOT configured');
+    console.log(`  AI coach:       ${status(Boolean(config.aiApiKey))}${
+      config.aiApiKey ? ` (${config.aiBaseUrl}, model ${config.aiModel})` : ' — /functions/ai-coach will return 500'
+    }`);
+    console.log(`  Reset email:    ${status(Boolean(config.resendApiKey && config.emailFrom))}`);
+    console.log(`  Stripe billing: ${status(Boolean(config.stripeSecretKey))}`);
+
+    if (!config.aiApiKey) {
+      console.log('  → Set AI_API_KEY in server/.env, then restart. That file is gitignored,');
+      console.log('    so it does not travel between machines — each one needs its own copy.');
     }
   });
 
