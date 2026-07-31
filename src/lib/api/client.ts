@@ -1,21 +1,57 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 
-const API_URL = (
-  Constants.expoConfig?.extra?.apiUrl ??
-  process.env.EXPO_PUBLIC_API_URL ??
-  ''
-).replace(/\/$/, '');
+/** Port the API listens on. Matches the server's default in server/src/config.ts. */
+const DEFAULT_API_PORT = 8787;
 
-// EXPO_PUBLIC_* is inlined at bundle time, so a missing .env produces an app that
-// builds fine and then fails on every screen. Say so once, loudly, at startup
-// rather than only as a per-request error.
+/**
+ * Works out where the API lives, without needing a .env in development.
+ *
+ * In a dev build Expo already knows the machine serving the JS bundle, so the
+ * API is almost always the same host on a different port. Deriving it from
+ * `hostUri` means the simulator *and* a physical device on the LAN both find the
+ * server with nothing to configure — a .env pointing at `localhost` would have
+ * been wrong on the device anyway.
+ *
+ * A release build has no dev server to ask, so EXPO_PUBLIC_API_URL is required
+ * there and its absence is a genuine misconfiguration.
+ */
+function resolveApiUrl(): string {
+  // An explicit value always wins — this is what production uses.
+  const explicit =
+    Constants.expoConfig?.extra?.apiUrl ?? process.env.EXPO_PUBLIC_API_URL ?? '';
+
+  if (explicit) return String(explicit).replace(/\/$/, '');
+
+  if (!__DEV__) return '';
+
+  // e.g. "192.168.1.42:8081" on a device, "localhost:8081" in the simulator.
+  const hostUri =
+    Constants.expoConfig?.hostUri ??
+    // Older/alternate shapes, present depending on how the app was launched.
+    (Constants.expoGoConfig as { debuggerHost?: string } | undefined)?.debuggerHost ??
+    '';
+
+  const host = hostUri.split(':')[0]?.trim();
+  if (host) return `http://${host}:${DEFAULT_API_PORT}`;
+
+  // Bundled without a reachable dev server (rare). The simulator maps localhost
+  // to the host machine, so this is still right there.
+  return `http://localhost:${DEFAULT_API_PORT}`;
+}
+
+const API_URL = resolveApiUrl();
+
+// Only reachable in a release build, where there is no dev server to infer from.
+// console.warn rather than console.error so it does not raise a full-screen
+// LogBox overlay during development.
 if (!API_URL) {
-  console.error(
-    '[Blue Balance] EXPO_PUBLIC_API_URL is not set. Copy .env.example to .env, ' +
-      'point it at your API, then restart the bundler with `npm run start:clear`. ' +
-      'Every network request will fail until this is set.',
+  console.warn(
+    '[Blue Balance] No API URL. Set EXPO_PUBLIC_API_URL before building for release; ' +
+      'every network request will fail without it.',
   );
+} else if (__DEV__) {
+  console.log(`[Blue Balance] API: ${API_URL}`);
 }
 
 const ACCESS_TOKEN_KEY = 'blueBalance_accessToken';

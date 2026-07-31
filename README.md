@@ -29,6 +29,11 @@ generates a development signing key on first boot, and applies migrations
 automatically at startup. There is no database to install and no connection
 string to set.
 
+**You do not configure the API URL in development.** A dev build asks Expo which
+machine is serving the JS bundle and uses port 8787 on that host — correct in the
+simulator and on a physical device on your Wi-Fi. Set `EXPO_PUBLIC_API_URL` only
+to point at a deployed backend or to build for release.
+
 Optional keys live in `server/.env`: `OPENAI_API_KEY` for the AI coach, the
 Stripe keys for billing, `GO_UPC_API_KEY` for the third barcode provider. The app
 reads `EXPO_PUBLIC_SCANDIT_LICENSE_KEY` from the root `.env`; without it the

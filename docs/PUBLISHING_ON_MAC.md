@@ -61,16 +61,25 @@ ipconfig getifaddr en0            # e.g. 192.168.1.42
 Set `EXPO_PUBLIC_API_URL=http://192.168.1.42:8787` in `.env`, run
 `npm run start:lan`, and keep both devices on the same Wi-Fi.
 
-### `.env` is gitignored, so a fresh clone has none
+### You do not need to configure the API URL in development
 
-`npm run dev` creates it for you from `.env.example`. Worth knowing why it
-matters: `EXPO_PUBLIC_*` values are inlined **at bundle time**, not read at
-runtime, so without `.env` the app builds and launches normally and then fails on
-every screen. The app logs a loud `[Blue Balance] EXPO_PUBLIC_API_URL is not set`
-error at startup if it is ever missing.
+A dev build asks Expo which machine is serving the JS bundle and uses port 8787
+on that same host. That is right in the simulator *and* on a physical device on
+your Wi-Fi — better than a hardcoded `localhost`, which would be wrong on the
+device, since the phone's localhost is the phone.
 
-**After editing `.env`, restart the bundler with `npm run start:clear`** — a
-running Metro keeps serving the old inlined value.
+On boot the app logs which URL it settled on:
+
+```
+[Blue Balance] API: http://192.168.1.42:8787
+```
+
+Set `EXPO_PUBLIC_API_URL` only to point at a deployed backend, or when building
+for release — a release build has no dev server to ask, so it is required there.
+
+**If you do set it, restart the bundler with `npm run start:clear`.**
+`EXPO_PUBLIC_*` is inlined **at bundle time**, so a running Metro keeps serving
+the old value.
 
 ### Plain HTTP on a physical device
 
