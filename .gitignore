@@ -44,6 +44,7 @@ supabase/functions/.env
 server/.env
 server/dist/
 server/pgdata/
+server/.dev-secret
 
 # Supabase local state
 supabase/.temp/

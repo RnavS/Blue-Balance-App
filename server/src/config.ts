@@ -1,26 +1,94 @@
-function required(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`${name} is not set. See server/.env.example.`);
+import { randomBytes } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { parseEnv } from 'node:util';
+
+/**
+ * Loads server/.env into process.env. Values already present in the real
+ * environment win, so a host's configuration is never overwritten by a file that
+ * happened to get committed or left behind locally.
+ */
+function loadEnvFile(path = './.env'): void {
+  if (!existsSync(path)) return;
+
+  const parsed = parseEnv(readFileSync(path, 'utf8')) as Record<string, string>;
+
+  for (const [key, value] of Object.entries(parsed)) {
+    if (process.env[key] === undefined && value !== '') {
+      process.env[key] = value;
+    }
   }
-  return value;
 }
+
+loadEnvFile();
+
+const nodeEnv = process.env.NODE_ENV ?? 'development';
+const isProduction = nodeEnv === 'production';
 
 function optional(name: string, fallback = ''): string {
   return process.env[name] ?? fallback;
 }
 
+/** Required in production; in development the caller supplies a safe default. */
+function requiredInProduction(name: string, devFallback: () => string): string {
+  const value = process.env[name];
+  if (value) return value;
+
+  if (isProduction) {
+    throw new Error(
+      `${name} is not set. It is required when NODE_ENV=production. See server/.env.example.`,
+    );
+  }
+
+  return devFallback();
+}
+
+/**
+ * Embedded Postgres (real Postgres compiled to WebAssembly) persisted to disk, so
+ * `npm run dev` works with no database to install and no connection string to
+ * configure, and the data survives restarts.
+ */
+const DEV_DATABASE_URL = 'pglite://./pgdata';
+
+const DEV_SECRET_FILE = './.dev-secret';
+
+/**
+ * Generates a development signing key once and reuses it, so sessions survive a
+ * server restart. Never used in production — requiredInProduction throws first.
+ */
+function loadOrCreateDevSecret(): string {
+  if (existsSync(DEV_SECRET_FILE)) {
+    const existing = readFileSync(DEV_SECRET_FILE, 'utf8').trim();
+    if (existing.length >= 32) return existing;
+  }
+
+  const secret = randomBytes(48).toString('base64url');
+  mkdirSync(dirname(DEV_SECRET_FILE), { recursive: true });
+  writeFileSync(DEV_SECRET_FILE, `${secret}\n`, { mode: 0o600 });
+
+  console.warn(
+    `[config] AUTH_JWT_SECRET was not set. Generated a development key and saved it to ${DEV_SECRET_FILE}. ` +
+      'Set AUTH_JWT_SECRET explicitly before deploying.',
+  );
+
+  return secret;
+}
+
 export const config = {
   port: Number(process.env.PORT ?? 8787),
-  nodeEnv: optional('NODE_ENV', 'development'),
+  nodeEnv,
+  isProduction,
 
-  databaseUrl: required('DATABASE_URL'),
+  databaseUrl: requiredInProduction('DATABASE_URL', () => {
+    console.warn(
+      `[config] DATABASE_URL was not set. Using embedded Postgres at ${DEV_DATABASE_URL}. ` +
+        'Set DATABASE_URL to a real Postgres before deploying.',
+    );
+    return DEV_DATABASE_URL;
+  }),
 
-  /**
-   * Must be at least 32 characters. Rotating it invalidates every access token
-   * immediately; refresh tokens survive because they are opaque and stored.
-   */
-  jwtSecret: required('AUTH_JWT_SECRET'),
+  jwtSecret: requiredInProduction('AUTH_JWT_SECRET', loadOrCreateDevSecret),
+
   accessTokenTtlSeconds: Number(optional('ACCESS_TOKEN_TTL_SECONDS', '3600')),
   refreshTokenTtlDays: Number(optional('REFRESH_TOKEN_TTL_DAYS', '60')),
 

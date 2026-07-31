@@ -5,6 +5,7 @@ import { logger } from 'hono/logger';
 import { requireUser, type AppEnv } from './auth/middleware.js';
 import { config } from './config.js';
 import { pool } from './db/client.js';
+import { ensureSchema } from './db/ensure-schema.js';
 import { errorResponse } from './lib/errors.js';
 import { accountRoutes } from './routes/account.js';
 import { authRoutes } from './routes/auth.js';
@@ -73,8 +74,19 @@ app.route('/account', accountRoutes);
 // The smoke test imports `app` to drive routes through app.fetch() directly, so
 // only bind a port when this module is the process entrypoint.
 if (!process.env.BLUE_BALANCE_NO_LISTEN) {
+  // Bring the schema up to date before accepting traffic, so a fresh clone needs
+  // no migrate step. A failure here is fatal: serving against a missing or stale
+  // schema would produce confusing 500s on every request.
+  await ensureSchema().catch((error) => {
+    console.error('[db] Failed to apply migrations:', error);
+    process.exit(1);
+  });
+
   serve({ fetch: app.fetch, port: config.port }, (info) => {
     console.log(`Blue Balance API listening on http://localhost:${info.port}`);
+    if (!config.isProduction) {
+      console.log('  Point the app at it with EXPO_PUBLIC_API_URL in the repo-root .env');
+    }
   });
 
   const shutdown = async (signal: string) => {

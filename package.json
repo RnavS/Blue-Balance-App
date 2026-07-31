@@ -4,6 +4,11 @@
   "main": "expo-router/entry",
   "private": true,
   "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "npm run setup && concurrently -n api,app -c blue,magenta \"npm:dev:api\" \"npm:dev:app\"",
+    "dev:api": "npm --prefix server run dev",
+    "dev:app": "expo start --dev-client",
+    "dev:lan": "npm run setup && concurrently -n api,app -c blue,magenta \"npm:dev:api\" \"expo start --dev-client --lan\"",
     "start": "expo start --dev-client",
     "start:clear": "expo start --dev-client -c",
     "start:lan": "expo start --dev-client --lan",
@@ -54,6 +59,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.10",
+    "concurrently": "^10.0.4",
     "typescript": "~5.9.2"
   }
 }

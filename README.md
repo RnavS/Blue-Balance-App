@@ -14,26 +14,38 @@ A React Native app built with Expo for tracking daily hydration with barcode sca
 
 ## Setup
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
+```bash
+npm install
+npm run dev
+```
 
-2. Set up environment variables in `.env` (see `.env.example`):
-   ```
-   EXPO_PUBLIC_API_URL=http://localhost:8787
-   EXPO_PUBLIC_SCANDIT_LICENSE_KEY=your_scandit_key
-   ```
+That is the whole thing. `npm run dev` creates any missing `.env` files, installs
+the server's dependencies on first run, starts the API on `:8787`, and starts the
+Metro bundler on `:8081`.
 
-3. Start the backend (first time only: `cd server && npm install && npm run db:migrate`):
-   ```bash
-   cd server && npm run dev
-   ```
+The API needs **no configuration to run locally** — it defaults to embedded
+Postgres (real Postgres compiled to WebAssembly, persisted to `server/pgdata/`),
+generates a development signing key on first boot, and applies migrations
+automatically at startup. There is no database to install and no connection
+string to set.
 
-4. Run the app:
-   ```bash
-   npm start
-   ```
+Optional keys live in `server/.env`: `OPENAI_API_KEY` for the AI coach, the
+Stripe keys for billing, `GO_UPC_API_KEY` for the third barcode provider. The app
+reads `EXPO_PUBLIC_SCANDIT_LICENSE_KEY` from the root `.env`; without it the
+scanner falls back to expo-camera.
+
+Useful variants:
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | API + Metro together |
+| `npm run dev:api` | API only |
+| `npm run dev:app` | Metro only |
+| `npm run dev:lan` | Both, with Metro on the LAN for a physical device |
+| `npm run start:clear` | Metro with a cleared cache (needed after editing `.env`) |
+
+**Before deploying**, set `DATABASE_URL` and `AUTH_JWT_SECRET` — the server
+refuses to start with `NODE_ENV=production` unless both are present.
 
 ## Building for App Store
 

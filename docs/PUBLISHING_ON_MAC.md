@@ -34,18 +34,21 @@ scans ports 8081–8085 and 19000–19002, gets connection-refused on every one,
 shows the "No development servers found" screen. That is not a crash — nothing is
 broken, the app simply has nothing to load.
 
-Three things must be running, in this order:
+One command runs everything:
 
 ```bash
-# 1. the backend  (terminal 1)
-cd server && npm run dev          # → http://localhost:8787
-
-# 2. the bundler  (terminal 2, from the repo root)
-npm run start                     # → Metro on http://localhost:8081
+npm run dev
 ```
 
-3. Then launch the app. It should find Metro automatically; if not, tap
-   **Enter URL manually** and type `http://localhost:8081`.
+That creates any missing `.env` files, installs the server's dependencies on
+first run, starts the API on `:8787` (embedded Postgres, migrations applied
+automatically — no database to install, nothing to configure), and starts Metro
+on `:8081`.
+
+Then launch the app. It should find Metro automatically; if not, tap
+**Enter URL manually** and type `http://localhost:8081`.
+
+To run just one half: `npm run dev:api` or `npm run dev:app`.
 
 **The simulator resolves `localhost` to the Mac**, so `http://localhost:8787`
 works there. On a **physical device** it does not — the phone's own localhost has
@@ -60,17 +63,14 @@ Set `EXPO_PUBLIC_API_URL=http://192.168.1.42:8787` in `.env`, run
 
 ### `.env` is gitignored, so a fresh clone has none
 
-`EXPO_PUBLIC_*` values are inlined **at bundle time**, not read at runtime. Without
-`.env` the app builds and launches normally and then fails on every screen. Create
-it before the first run:
+`npm run dev` creates it for you from `.env.example`. Worth knowing why it
+matters: `EXPO_PUBLIC_*` values are inlined **at bundle time**, not read at
+runtime, so without `.env` the app builds and launches normally and then fails on
+every screen. The app logs a loud `[Blue Balance] EXPO_PUBLIC_API_URL is not set`
+error at startup if it is ever missing.
 
-```bash
-cp .env.example .env
-```
-
-The app logs a loud `[Blue Balance] EXPO_PUBLIC_API_URL is not set` error at
-startup if you forget. **After editing `.env`, restart the bundler with
-`npm run start:clear`** — a running Metro will keep serving the old inlined value.
+**After editing `.env`, restart the bundler with `npm run start:clear`** — a
+running Metro keeps serving the old inlined value.
 
 ### Plain HTTP on a physical device
 
