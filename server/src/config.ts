@@ -98,8 +98,13 @@ export const config = {
     .map((entry) => entry.trim())
     .filter(Boolean),
 
-  openaiApiKey: optional('OPENAI_API_KEY'),
-  openaiModel: optional('OPENAI_MODEL', 'gpt-4o-mini'),
+  // The AI coach talks to any endpoint that speaks the OpenAI chat-completions
+  // shape — your own model, a self-hosted server, or OpenAI itself. Point
+  // AI_BASE_URL at the root that has /chat/completions under it.
+  // OPENAI_* are read as fallbacks so existing setups keep working.
+  aiBaseUrl: optional('AI_BASE_URL', optional('OPENAI_BASE_URL', 'https://api.openai.com/v1')),
+  aiApiKey: optional('AI_API_KEY', optional('OPENAI_API_KEY')),
+  aiModel: optional('AI_MODEL', optional('OPENAI_MODEL', 'gpt-4o-mini')),
 
   stripeSecretKey: optional('STRIPE_SECRET_KEY'),
   stripeWebhookSecret: optional('STRIPE_WEBHOOK_SECRET'),

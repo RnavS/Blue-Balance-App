@@ -18,7 +18,65 @@ async function createEmbedded() {
   const { PGlite } = await import('@electric-sql/pglite');
   const { drizzle: drizzlePglite } = await import('drizzle-orm/pglite');
   const dataDir = config.databaseUrl.slice('pglite://'.length);
-  const client = new PGlite(dataDir || undefined);
+
+  /** Opening is not enough — a corrupt directory only aborts once queried. */
+  async function open() {
+    const client = new PGlite(dataDir || undefined);
+    try {
+      await client.query('SELECT 1');
+      return client;
+    } catch (error) {
+      // Release the directory before anyone tries to move or delete it —
+      // Windows refuses both while a handle is open.
+      await client.close().catch(() => null);
+      throw error;
+    }
+  }
+
+  let client: Awaited<ReturnType<typeof open>>;
+
+  try {
+    client = await open();
+  } catch (error) {
+    // Killing the process while PGlite holds the directory open can leave it
+    // unreadable, and it never recovers on its own — the server simply refuses
+    // to boot with an opaque WebAssembly abort. This is a disposable local dev
+    // database, so move the wreckage aside and start clean rather than making
+    // someone decode that. A real DATABASE_URL never reaches this path.
+    if (!dataDir) throw error;
+
+    const { rename } = await import('node:fs/promises');
+    const { existsSync } = await import('node:fs');
+    const quarantine = `${dataDir}.corrupt-${Date.now()}`;
+
+    console.error(
+      '[db] Could not open the embedded database:',
+      error instanceof Error ? error.message : error,
+    );
+
+    if (!existsSync(dataDir)) throw error;
+
+    // Move, never delete. The same failure is raised when another server
+    // already has this directory open, and that server's data must not be
+    // destroyed by a second one starting up. A rename fails while anything
+    // holds the directory, which is exactly the guard we want: recovery only
+    // proceeds when nothing else is using it.
+    try {
+      await rename(dataDir, quarantine);
+    } catch {
+      throw new Error(
+        `The embedded database at ${dataDir} could not be opened or moved aside.\n` +
+          '  Most likely another Blue Balance server is already running — check for one before starting a second.\n' +
+          `  If nothing else is running, the directory is damaged: delete ${dataDir} and start again.`,
+      );
+    }
+
+    console.warn(
+      `[db] Moved the unreadable database to ${quarantine} and started fresh. Local dev data is gone.`,
+    );
+
+    client = await open();
+  }
 
   return {
     // The query-builder surface is identical across drivers; only the transport

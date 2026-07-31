@@ -40,8 +40,14 @@ services:
       - key: NODE_ENV
         value: production
 
-      # Required for the AI coach. Without it /functions/ai-coach returns 500.
-      - key: OPENAI_API_KEY
+      # AI coach. Any endpoint speaking the OpenAI chat-completions shape works;
+      # AI_BASE_URL is the root that has /chat/completions under it. Without a
+      # key, /functions/ai-coach returns 500.
+      - key: AI_BASE_URL
+        sync: false
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_MODEL
         sync: false
 
       # Only needed for billing on web/Android. iOS is free in 1.0.

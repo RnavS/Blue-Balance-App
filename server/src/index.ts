@@ -81,7 +81,22 @@ if (!process.env.BLUE_BALANCE_NO_LISTEN) {
     console.error('[fatal] Unhandled promise rejection:', reason);
   });
 
-  process.on('uncaughtException', (error) => {
+  // Errors that mean the process can never do its job — a port already taken,
+  // a file handle limit — must still be fatal. Swallowing those leaves a
+  // process that is alive, logging nothing, and serving nobody.
+  const UNRECOVERABLE = new Set(['EADDRINUSE', 'EACCES', 'EMFILE', 'ENFILE']);
+
+  process.on('uncaughtException', (error: NodeJS.ErrnoException) => {
+    if (error.code && UNRECOVERABLE.has(error.code)) {
+      console.error(`[fatal] ${error.code}: ${error.message}`);
+      if (error.code === 'EADDRINUSE') {
+        console.error(`[fatal] Port ${config.port} is already in use. Stop the other process, or set PORT.`);
+      }
+      process.exit(1);
+    }
+
+    // Anything else is most likely scoped to one request. Log it and keep
+    // serving rather than dropping every other user's session.
     console.error('[fatal] Uncaught exception:', error);
   });
 

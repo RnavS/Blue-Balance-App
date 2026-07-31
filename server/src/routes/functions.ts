@@ -98,8 +98,8 @@ functionRoutes.post('/ai-coach', async (c) => {
   const message = String(body?.message ?? '').trim();
   if (!message) throw badRequest('Message is required');
 
-  if (!config.openaiApiKey) {
-    throw new HttpError(500, 'OPENAI_API_KEY is not configured', { error: 'ai_not_configured' });
+  if (!config.aiApiKey) {
+    throw new HttpError(500, 'AI_API_KEY is not configured', { error: 'ai_not_configured' });
   }
 
   const systemPrompt = `You are Blue, the Blue Balance hydration assistant.
@@ -144,18 +144,28 @@ ${body?.context ?? ''}`;
     { role: 'user', content: message },
   ];
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  // ---------------------------------------------------------------------------
+  // This is the only place the AI provider is called.
+  //
+  // Any endpoint exposing OpenAI-compatible /chat/completions works by setting
+  // AI_BASE_URL — no code change. If your model expects a different request or
+  // response shape, this fetch and the two lines reading `choices[0].message`
+  // below are the only things to rewrite.
+  // ---------------------------------------------------------------------------
+  const endpoint = `${config.aiBaseUrl.replace(/\/$/, '')}/chat/completions`;
+
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${config.openaiApiKey}`,
+      Authorization: `Bearer ${config.aiApiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ model: config.openaiModel, messages, temperature: 0.7 }),
+    body: JSON.stringify({ model: config.aiModel, messages, temperature: 0.7 }),
   });
 
   if (!response.ok) {
     const detail = await response.text();
-    console.error('OpenAI request failed:', response.status, detail);
+    console.error(`AI request to ${endpoint} failed:`, response.status, detail);
     throw new HttpError(502, 'The coach is unavailable right now.', { error: 'ai_request_failed' });
   }
 

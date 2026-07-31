@@ -23,6 +23,7 @@ import SurfaceCard from '@/components/ui/SurfaceCard';
 import { useProfile } from '@/contexts/ProfileContext';
 import { usePremium } from '@/contexts/PremiumContext';
 import * as api from '@/lib/api';
+import { BARCODE_SCANNING_ENABLED } from '@/lib/features';
 import { useAppTheme } from '@/theme/useAppTheme';
 import { inferBeverageCategory } from '@/utils/beverageCategory';
 
@@ -53,7 +54,11 @@ export default function ScanScreen() {
   const router = useRouter();
   const { currentProfile, addWaterLog, scannedBeverages, addScannedBeverage, deleteScannedBeverage } = useProfile();
   const { isPremium, scansUsedThisMonth, scansLimitThisMonth, refreshPremium } = usePremium();
-  const [activeView, setActiveView] = useState<ViewMode>('scan');
+  // Scanning is the natural landing tab, but not while it is gated behind a
+  // "coming soon" card — send people straight to the thing that works.
+  const [activeView, setActiveView] = useState<ViewMode>(
+    BARCODE_SCANNING_ENABLED ? 'scan' : 'manual',
+  );
   const [hasPermission, setHasPermission] = useState<boolean | null>(null);
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -477,7 +482,7 @@ export default function ScanScreen() {
           <Text style={styles.subtitle}>Manual logging is always free. Premium unlocks unlimited barcode lookup.</Text>
         </View>
 
-        {!isPremium && (
+        {!isPremium && BARCODE_SCANNING_ENABLED && (
           <SurfaceCard style={styles.limitCard}>
             <View style={styles.limitHeader}>
               <Ionicons name="scan-outline" size={20} color={theme.colors.primary} />
@@ -504,7 +509,23 @@ export default function ScanScreen() {
           ))}
         </View>
 
-        {activeView === 'scan' && (
+        {activeView === 'scan' && !BARCODE_SCANNING_ENABLED && (
+          <View style={styles.cameraWrap}>
+            <View style={styles.centerState}>
+              <Ionicons name="barcode-outline" size={42} color={theme.colors.primary} />
+              <Text style={styles.emptyTitle}>Barcode scanning is coming soon</Text>
+              <Text style={styles.emptyText}>
+                We are putting the finishing touches on the scanner. In the meantime you can
+                add any drink from the Manual tab — it takes a couple of taps.
+              </Text>
+              <Pressable style={styles.permissionBtn} onPress={() => setActiveView('manual')}>
+                <Text style={styles.permissionBtnText}>Log Manually</Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
+
+        {activeView === 'scan' && BARCODE_SCANNING_ENABLED && (
           <View style={styles.cameraWrap}>
             {hasPermission === null && (
               <View style={styles.centerState}>
