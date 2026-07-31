@@ -45,7 +45,9 @@ Useful variants:
 | `npm run start:clear` | Metro with a cleared cache (needed after editing `.env`) |
 
 **Before deploying**, set `DATABASE_URL` and `AUTH_JWT_SECRET` — the server
-refuses to start with `NODE_ENV=production` unless both are present.
+refuses to start with `NODE_ENV=production` unless both are present. See
+[docs/DEPLOYING.md](docs/DEPLOYING.md); [`render.yaml`](render.yaml) provisions
+the database and generates the secret for you.
 
 ## Building for App Store
 

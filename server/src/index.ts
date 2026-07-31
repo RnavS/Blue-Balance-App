@@ -82,8 +82,11 @@ if (!process.env.BLUE_BALANCE_NO_LISTEN) {
     process.exit(1);
   });
 
-  serve({ fetch: app.fetch, port: config.port }, (info) => {
-    console.log(`Blue Balance API listening on http://localhost:${info.port}`);
+  // 0.0.0.0 rather than loopback: a container that binds only to localhost is
+  // unreachable from its host, and it lets a physical device reach the dev
+  // server over the LAN.
+  serve({ fetch: app.fetch, port: config.port, hostname: '0.0.0.0' }, (info) => {
+    console.log(`Blue Balance API listening on port ${info.port}`);
     if (!config.isProduction) {
       console.log('  Point the app at it with EXPO_PUBLIC_API_URL in the repo-root .env');
     }

@@ -115,9 +115,9 @@ npm run smoke
 compiled to WebAssembly, so it needs no database and proves auth, CRUD, and
 cross-user isolation all work before you touch the deployment.
 
-Deploy it (Railway shown; any Node host works), set the same environment
-variables in the host's dashboard, then run `npm run db:migrate` against the
-production `DATABASE_URL`.
+To deploy, follow [DEPLOYING.md](DEPLOYING.md) — [`render.yaml`](../render.yaml)
+provisions the Postgres and generates the signing key, and migrations apply
+themselves at startup, so there is no separate migrate step.
 
 Confirm it is live:
 
