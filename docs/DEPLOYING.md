@@ -134,11 +134,9 @@ cannot be replayed.
 
 - [ ] Paid tier for both the database and the service — free tiers sleep and expire
 - [ ] `AUTH_JWT_SECRET` set (never rely on the generated dev key)
-- [ ] **Password reset sends no email.** There is no provider wired up, so anyone
-      who forgets their password is locked out permanently. This is the most
-      urgent gap. Wire up Resend/Postmark/SES and remove the `resetToken` field
-      from the development response.
-- [ ] **No rate limiting** on sign-in or password reset
+- [ ] `RESEND_API_KEY` and `EMAIL_FROM` set, so password reset can actually
+      deliver. Without a provider the route returns 503 in production rather
+      than stranding the user with a token it cannot send.
 - [ ] Database backups enabled
 - [ ] A demo account created on the deployed instance for App Review, with
       credentials you have personally verified by signing in
