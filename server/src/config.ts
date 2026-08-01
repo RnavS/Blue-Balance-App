@@ -118,7 +118,7 @@ export const config = {
   resendApiKey: optional('RESEND_API_KEY'),
   emailFrom: optional('EMAIL_FROM'),
 
-  /** Set to "false" to re-enable the paywall on iOS. See docs/APP_STORE_SUBMISSION.md. */
+  /** Set to "false" to re-enable the paywall on iOS. See docs-internal/APP_STORE_SUBMISSION.md. */
   iosPremiumFree: optional('IOS_PREMIUM_FREE', 'true'),
 } as const;
 

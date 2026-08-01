@@ -51,7 +51,7 @@ Useful variants:
 
 **Before deploying**, set `DATABASE_URL` and `AUTH_JWT_SECRET` — the server
 refuses to start with `NODE_ENV=production` unless both are present. See
-[docs/DEPLOYING.md](docs/DEPLOYING.md); [`render.yaml`](render.yaml) provisions
+[docs-internal/DEPLOYING.md](docs-internal/DEPLOYING.md); [`render.yaml`](render.yaml) provisions
 the database and generates the secret for you.
 
 ## Building for App Store
@@ -96,8 +96,8 @@ the database and generates the secret for you.
 
 ## Publishing Checklist
 
-- [docs/PUBLISHING_ON_MAC.md](docs/PUBLISHING_ON_MAC.md) — step-by-step release walkthrough
-- [docs/APP_STORE_SUBMISSION.md](docs/APP_STORE_SUBMISSION.md) — audit, per-service verification, open blockers
+- [docs-internal/PUBLISHING_ON_MAC.md](docs-internal/PUBLISHING_ON_MAC.md) — step-by-step release walkthrough
+- [docs-internal/APP_STORE_SUBMISSION.md](docs-internal/APP_STORE_SUBMISSION.md) — audit, per-service verification, open blockers
 
 Note: iOS cannot be built on Windows — `expo prebuild --platform ios` refuses to
 run there. Use a Mac.
